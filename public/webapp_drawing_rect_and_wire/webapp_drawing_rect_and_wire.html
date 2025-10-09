@@ -1010,10 +1010,11 @@
             init() {
                 this.setupCanvas();
                 this.setupEventListeners();
+                this.setupTouchEvents(); // Add this line
                 this.saveState();
                 this.draw();
             }
-            
+
             setupCanvas() {
                 const container = this.canvas.parentElement;
                 this.canvas.width = container.clientWidth;
@@ -3155,6 +3156,67 @@
                 this.drawConnectionPoints();
                 this.drawCurrentRect();
                 this.drawCurrentWire();
+            }
+
+            // Add these methods to handle touch events
+            setupTouchEvents() {
+                this.canvas.addEventListener('touchstart', (e) => this.handleTouchStart(e), { passive: false });
+                this.canvas.addEventListener('touchmove', (e) => this.handleTouchMove(e), { passive: false });
+                this.canvas.addEventListener('touchend', (e) => this.handleTouchEnd(e));
+            }
+            
+            handleTouchStart(e) {
+                e.preventDefault();
+                if (e.touches.length === 1) {
+                    const touch = e.touches[0];
+                    const rect = this.canvas.getBoundingClientRect();
+                    const x = touch.clientX - rect.left;
+                    const y = touch.clientY - rect.top;
+                    
+                    // Create a synthetic mouse event
+                    const syntheticEvent = {
+                        clientX: touch.clientX,
+                        clientY: touch.clientY,
+                        button: 0,
+                        preventDefault: () => e.preventDefault(),
+                        touches: e.touches
+                    };
+                    
+                    this.handleMouseDown(syntheticEvent);
+                }
+            }
+            
+            handleTouchMove(e) {
+                e.preventDefault();
+                if (e.touches.length === 1) {
+                    const touch = e.touches[0];
+                    const rect = this.canvas.getBoundingClientRect();
+                    const x = touch.clientX - rect.left;
+                    const y = touch.clientY - rect.top;
+                    
+                    // Create a synthetic mouse event
+                    const syntheticEvent = {
+                        clientX: touch.clientX,
+                        clientY: touch.clientY,
+                        button: 0,
+                        preventDefault: () => e.preventDefault(),
+                        touches: e.touches
+                    };
+                    
+                    this.handleMouseMove(syntheticEvent);
+                }
+            }
+            
+            handleTouchEnd(e) {
+                e.preventDefault();
+                
+                // Create a synthetic mouse event
+                const syntheticEvent = {
+                    button: 0,
+                    preventDefault: () => e.preventDefault()
+                };
+                
+                this.handleMouseUp(syntheticEvent);
             }
         }
         
