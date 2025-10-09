@@ -1,0 +1,3166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Canvas Drawing WebApp - Enhanced Pathfinding</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+        
+        header {
+            background: #2c3e50;
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        h1 {
+            font-size: 24px;
+            font-weight: 600;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
+        
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        
+        button:hover {
+            background: #2980b9;
+            transform: translateY(-2px);
+        }
+        
+        button.active {
+            background: #e74c3c;
+        }
+        
+        button:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .content {
+            display: flex;
+            height: 600px;
+        }
+        
+        .toolbar {
+            width: 200px;
+            background: #34495e;
+            color: white;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            height: 100%;
+            overflow-y: auto;
+        }
+        
+        .tool-section {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        
+        .tool-section h3 {
+            font-size: 16px;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .tool-btn {
+            width: 100%;
+            background: transparent;
+            border: 2px solid transparent;
+            color: white;
+            padding: 10px;
+            margin: 5px 0;
+            text-align: left;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .tool-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: #3498db;
+        }
+        
+        .tool-btn.active {
+            background: rgba(52, 152, 219, 0.3);
+            border-color: #3498db;
+        }
+        
+        .canvas-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            background: #ecf0f1;
+        }
+        
+        canvas {
+            display: block;
+            background: white;
+            cursor: crosshair;
+        }
+        
+        .status-bar {
+            background: #2c3e50;
+            color: white;
+            padding: 8px 15px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+        }
+        
+        .current-tool {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .selection-info {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 12px;
+        }
+
+        .collision-warning {
+            position: absolute;
+            top: 50px;
+            left: 10px;
+            background: rgba(231, 76, 60, 0.9);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 12px;
+            display: none;
+        }
+
+        .view-controls {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            display: flex;
+            gap: 5px;
+            background: rgba(0,0,0,0.8);
+            padding: 5px;
+            border-radius: 5px;
+        }
+
+        .view-controls button {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            width: 600px;
+            max-width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #ecf0f1;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            color: #2c3e50;
+        }
+
+        .close-modal {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #7f8c8d;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #2c3e50;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #bdc3c7;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+
+        .form-group textarea {
+            height: 100px;
+            resize: vertical;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .btn-primary {
+            background: #3498db;
+        }
+
+        .btn-secondary {
+            background: #95a5a6;
+        }
+        
+        .instructions {
+            font-size: 11px !important;
+            line-height: 1.3 !important;
+            color: #ecf0f1 !important;
+        }
+        
+        .instructions p {
+            margin-bottom: 8px;
+        }
+
+        /* New styles for symmetry controls */
+        .symmetry-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .symmetry-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .symmetry-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .symmetry-control label {
+            font-size: 12px;
+            color: #2c3e50;
+            min-width: 120px;
+        }
+        
+        .symmetry-control input {
+            width: 60px;
+            padding: 4px 8px;
+            border: 1px solid #bdc3c7;
+            border-radius: 3px;
+            text-align: center;
+        }
+        
+        .size-controls {
+            display: flex;
+            gap: 15px;
+            margin-top: 10px;
+        }
+        
+        .size-control {
+            flex: 1;
+        }
+        
+        .size-control label {
+            font-size: 12px;
+            color: #2c3e50;
+            margin-bottom: 5px;
+            display: block;
+        }
+        
+        .size-control input {
+            width: 100%;
+            padding: 6px 8px;
+            border: 1px solid #bdc3c7;
+            border-radius: 3px;
+            text-align: center;
+        }
+        
+        .debug-section {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 10px;
+            margin-top: 10px;
+        }
+        
+        .debug-section h4 {
+            margin: 0 0 10px 0;
+            color: #495057;
+            font-size: 14px;
+            border-bottom: 1px solid #dee2e6;
+            padding-bottom: 5px;
+        }
+        
+        .debug-info {
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            line-height: 1.4;
+            color: #495057;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+            background: white;
+            padding: 8px;
+            border-radius: 3px;
+            border: 1px solid #dee2e6;
+        }
+        
+        .debug-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+        
+        .debug-label {
+            font-weight: bold;
+            color: #495057;
+        }
+        
+        .debug-value {
+            color: #6c757d;
+        }
+        
+        .connection-points-list {
+            max-height: 150px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 3px;
+            padding: 5px;
+            background: white;
+            font-size: 10px;
+        }
+        
+        .connection-point-item {
+            padding: 3px 5px;
+            border-bottom: 1px solid #f1f3f4;
+        }
+        
+        .connection-point-item:last-child {
+            border-bottom: none;
+        }
+        
+        /* Manual routing indicator */
+        .manual-routing-indicator {
+            position: absolute;
+            top: 80px;
+            left: 10px;
+            background: rgba(155, 89, 182, 0.9);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 12px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Canvas Drawing WebApp - Enhanced Pathfinding</h1>
+            <div class="controls">
+                <button id="gridToggle">Grid: ON (G)</button>
+                <button id="fitAll">Fit All (F)</button>
+                <button id="recenter">Re-center (R)</button>
+                <button id="zoomIn">Zoom In (+)</button>
+                <button id="zoomOut">Zoom Out (-)</button>
+                <button id="undoBtn" disabled>Undo (Ctrl+Z)</button>
+                <button id="redoBtn" disabled>Redo (Ctrl+Y)</button>
+                <button id="copyBtn" disabled>Copy (Ctrl+C)</button>
+                <button id="pasteBtn" disabled>Paste (Ctrl+V)</button>
+                <button id="deleteBtn" disabled>Delete (Del)</button>
+            </div>
+        </header>
+        
+        <div class="content">
+            <div class="toolbar">
+                <div class="tool-section">
+                    <h3>Tools</h3>
+                    <button class="tool-btn active" data-tool="select">Select (S)</button>
+                    <button class="tool-btn" data-tool="rectangle">Rectangle (R)</button>
+                    <button class="tool-btn" data-tool="wire">Wire (W)</button>
+                </div>
+                <div class="tool-section">
+                    <h3>View Controls</h3>
+                    <div class="instructions">
+                        <p><strong>Zoom:</strong> Mouse Wheel</p>
+                        <p><strong>Pan:</strong> Middle Mouse + Drag</p>
+                        <p><strong>Pan:</strong> Hold Space + Drag</p>
+                        <p><strong>Fit All:</strong> F key</p>
+                        <p><strong>Re-center:</strong> R key</p>
+                        <p><strong>Zoom In/Out:</strong> +/- keys</p>
+                    </div>
+                </div>
+                <div class="tool-section">
+                    <h3>Wire Routing</h3>
+                    <div class="instructions">
+                        <p><strong>Auto Routing:</strong> Click and drag between rectangles</p>
+                        <p><strong>Manual Routing:</strong> Hold Shift + Click connection point to start</p>
+                        <p><strong>Add Waypoint:</strong> Click (while holding Shift)</p>
+                        <p><strong>Complete Wire:</strong> Click target connection point</p>
+                        <p><strong>Cancel Manual:</strong> Release Shift key</p>
+                    </div>
+                </div>
+                <div class="tool-section">
+                    <h3>Instructions</h3>
+                    <div class="instructions">
+                        <p><strong>Select Tool:</strong> Click to select, double-click to edit</p>
+                        <p><strong>Move Rectangle:</strong> Select and drag with mouse</p>
+                        <p><strong>Rectangle Tool:</strong> Click and drag to draw</p>
+                        <p><strong>Wire Tool:</strong> Click rectangle, drag to another</p>
+                        <p><strong>Collision Prevention:</strong> Rectangles cannot overlap</p>
+                        <p><strong>Wire Clearance:</strong> Maintains space for wires</p>
+                        <p><strong>Edit Text:</strong> Double-click rectangles</p>
+                        <p><strong>Copy/Paste:</strong> Ctrl+C / Ctrl+V</p>
+                        <p><strong>Delete:</strong> Select and press Delete key</p>
+                        <p><strong>Undo/Redo:</strong> Ctrl+Z / Ctrl+Y</p>
+                        <p><strong>Connection Points:</strong> Each rectangle has its own symmetry settings</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="canvas-container">
+                <canvas id="mainCanvas"></canvas>
+                <div class="current-tool" id="currentTool">Current Tool: Select</div>
+                <div class="selection-info" id="selectionInfo">No selection</div>
+                <div class="collision-warning" id="collisionWarning">Collision detected! Cannot place rectangle here.</div>
+                <div class="manual-routing-indicator" id="manualRoutingIndicator">Manual Routing Mode - Click to add waypoints, Release Shift to cancel</div>
+                <div class="view-controls">
+                    <button id="viewZoomIn">+</button>
+                    <button id="viewZoomOut">-</button>
+                    <button id="viewFitAll">Fit</button>
+                    <button id="viewRecenter">Center</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="status-bar">
+            <div id="coordinates">X: 0, Y: 0</div>
+            <div id="zoomLevel">Zoom: 100%</div>
+            <div id="selectedTool">Selected Tool: Select</div>
+        </div>
+    </div>
+
+    <!-- Text Edit Modal -->
+    <div class="modal" id="textModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Edit Rectangle Properties</h2>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="form-group">
+                <label for="rectTitle">Title</label>
+                <input type="text" id="rectTitle" placeholder="Enter rectangle title">
+            </div>
+            <div class="form-group">
+                <label for="rectDescription">Description</label>
+                <textarea id="rectDescription" placeholder="Enter rectangle description"></textarea>
+            </div>
+            <div class="form-group">
+                <h3 style="margin-bottom: 10px; color: #2c3e50;">Rectangle Size</h3>
+                <div class="size-controls">
+                    <div class="size-control">
+                        <label for="rectWidth">Width:</label>
+                        <input type="number" id="rectWidth" min="50" max="1000" value="100">
+                    </div>
+                    <div class="size-control">
+                        <label for="rectHeight">Height:</label>
+                        <input type="number" id="rectHeight" min="50" max="1000" value="100">
+                    </div>
+                </div>
+            </div>
+            <div class="form-group">
+                <h3 style="margin-bottom: 10px; color: #2c3e50;">Connection Point Symmetry</h3>
+                <div class="symmetry-controls">
+                    <div class="symmetry-row">
+                        <div class="symmetry-control">
+                            <label for="rectHeightSymmetry">Height Symmetry:</label>
+                            <input type="number" id="rectHeightSymmetry" min="0" max="10" value="1">
+                        </div>
+                        <div class="symmetry-control">
+                            <label for="rectWidthSymmetry">Width Symmetry:</label>
+                            <input type="number" id="rectWidthSymmetry" min="0" max="10" value="1">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Debug Information Section -->
+            <div class="form-group">
+                <div class="debug-section">
+                    <h4>Debug Information</h4>
+                    
+                    <div class="debug-row">
+                        <span class="debug-label">Rectangle ID:</span>
+                        <span class="debug-value" id="debugRectId">-</span>
+                    </div>
+                    <div class="debug-row">
+                        <span class="debug-label">Position (X, Y):</span>
+                        <span class="debug-value" id="debugRectPosition">-</span>
+                    </div>
+                    <div class="debug-row">
+                        <span class="debug-label">Size (W × H):</span>
+                        <span class="debug-value" id="debugRectSize">-</span>
+                    </div>
+                    <div class="debug-row">
+                        <span class="debug-label">Connection Points:</span>
+                        <span class="debug-value" id="debugConnectionPointsCount">-</span>
+                    </div>
+                    
+                    <div style="margin-top: 10px;">
+                        <label style="font-weight: bold; display: block; margin-bottom: 5px;">Connection Point Details:</label>
+                        <div class="connection-points-list" id="debugConnectionPointsList">
+                            No connection points
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 10px;">
+                        <label style="font-weight: bold; display: block; margin-bottom: 5px;">Radius Calculations:</label>
+                        <div class="debug-info" id="debugRadiusCalculations">
+                            No radius calculations available
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 10px;">
+                        <label style="font-weight: bold; display: block; margin-bottom: 5px;">Outward Points:</label>
+                        <div class="debug-info" id="debugOutwardPoints">
+                            No outward points calculated
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="modal-actions">
+                <button class="btn-secondary" id="cancelText">Cancel</button>
+                <button class="btn-primary" id="saveText">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Rectangle class with individual symmetry properties
+        class Rectangle {
+            constructor(x, y, width, height, id) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.id = id;
+                this.color = '#3498db';
+                this.selected = false;
+                this.title = '';
+                this.description = '';
+                
+                // Individual symmetry properties for this rectangle
+                this.heightSymmetry = 1;
+                this.widthSymmetry = 1;
+                
+                // Connection points for this rectangle
+                this.connectionPoints = [];
+                this.updateConnectionPoints();
+            }
+            
+            // Update connection points based on current symmetry settings
+            updateConnectionPoints() {
+                this.connectionPoints = [];
+                
+                // Height edges (left and right)
+                if (this.heightSymmetry > 0) {
+                    const stepY = this.height / (this.heightSymmetry + 1);
+                    for (let i = 1; i <= this.heightSymmetry; i++) {
+                        const y = this.y + i * stepY;
+                        this.connectionPoints.push({ 
+                            x: this.x, 
+                            y: y, 
+                            side: 'left',
+                            rect: this
+                        });
+                        this.connectionPoints.push({ 
+                            x: this.x + this.width, 
+                            y: y, 
+                            side: 'right',
+                            rect: this
+                        });
+                    }
+                }
+                
+                // Width edges (top and bottom)
+                if (this.widthSymmetry > 0) {
+                    const stepX = this.width / (this.widthSymmetry + 1);
+                    for (let i = 1; i <= this.widthSymmetry; i++) {
+                        const x = this.x + i * stepX;
+                        this.connectionPoints.push({ 
+                            x: x, 
+                            y: this.y, 
+                            side: 'top',
+                            rect: this
+                        });
+                        this.connectionPoints.push({ 
+                            x: x, 
+                            y: this.y + this.height, 
+                            side: 'bottom',
+                            rect: this
+                        });
+                    }
+                }
+            }
+            
+            // Calculate the radius of the dotted-line cycle based on rectangle dimensions and symmetry
+            calculateCycleRadius(point) {
+                if (point.side === 'top' || point.side === 'bottom') {
+                    return this.width / (2 * (this.widthSymmetry + 1));
+                } else { // left or right
+                    return this.height / (2 * (this.heightSymmetry + 1));
+                }
+            }
+            
+            // Calculate the outward routing point from the connection point
+            calculateOutwardPoint(connectionPoint) {
+                const cycleRadius = this.calculateCycleRadius(connectionPoint);
+                
+                switch (connectionPoint.side) {
+                    case 'left':
+                        return { 
+                            x: connectionPoint.x - cycleRadius, 
+                            y: connectionPoint.y,
+                            side: 'left'
+                        };
+                    case 'right':
+                        return { 
+                            x: connectionPoint.x + cycleRadius, 
+                            y: connectionPoint.y,
+                            side: 'right'
+                        };
+                    case 'top':
+                        return { 
+                            x: connectionPoint.x, 
+                            y: connectionPoint.y - cycleRadius,
+                            side: 'top'
+                        };
+                    case 'bottom':
+                        return { 
+                            x: connectionPoint.x, 
+                            y: connectionPoint.y + cycleRadius,
+                            side: 'bottom'
+                        };
+                    default:
+                        return { ...connectionPoint };
+                }
+            }
+            
+            // Find a connection point by mouse position
+            findConnectionPointByMouse(mouseX, mouseY) {
+                if (this.connectionPoints.length === 0) {
+                    return null;
+                }
+                
+                let closestPoint = null;
+                let closestDistance = Infinity;
+                
+                for (const point of this.connectionPoints) {
+                    const cycleRadius = this.calculateCycleRadius(point);
+                    const outwardPoint = this.calculateOutwardPoint(point);
+                    
+                    const dx = mouseX - outwardPoint.x;
+                    const dy = mouseY - outwardPoint.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance <= cycleRadius && distance < closestDistance) {
+                        closestDistance = distance;
+                        closestPoint = point;
+                    }
+                }
+                
+                return closestPoint;
+            }
+            
+            // Get debug information for this rectangle
+            getDebugInfo() {
+                const info = {
+                    id: this.id,
+                    position: { x: this.x, y: this.y },
+                    size: { width: this.width, height: this.height },
+                    symmetry: { height: this.heightSymmetry, width: this.widthSymmetry },
+                    connectionPoints: [],
+                    radiusCalculations: [],
+                    outwardPoints: []
+                };
+                
+                this.connectionPoints.forEach((point, index) => {
+                    info.connectionPoints.push({
+                        index: index,
+                        x: point.x,
+                        y: point.y,
+                        side: point.side
+                    });
+                    
+                    const radius = this.calculateCycleRadius(point);
+                    info.radiusCalculations.push({
+                        pointIndex: index,
+                        side: point.side,
+                        radius: radius,
+                        calculation: this.getRadiusCalculation(point)
+                    });
+                    
+                    const outwardPoint = this.calculateOutwardPoint(point);
+                    info.outwardPoints.push({
+                        pointIndex: index,
+                        x: outwardPoint.x,
+                        y: outwardPoint.y,
+                        side: outwardPoint.side
+                    });
+                });
+                
+                return info;
+            }
+            
+            getRadiusCalculation(point) {
+                if (point.side === 'top' || point.side === 'bottom') {
+                    return `Width (${this.width}) / (2 * (WidthSymmetry (${this.widthSymmetry}) + 1)) = ${this.width} / ${2 * (this.widthSymmetry + 1)} = ${this.calculateCycleRadius(point).toFixed(2)}`;
+                } else {
+                    return `Height (${this.height}) / (2 * (HeightSymmetry (${this.heightSymmetry}) + 1)) = ${this.height} / ${2 * (this.heightSymmetry + 1)} = ${this.calculateCycleRadius(point).toFixed(2)}`;
+                }
+            }
+        }
+
+        class DrawingApp {
+            constructor() {
+                this.canvas = document.getElementById('mainCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.currentToolElement = document.getElementById('currentTool');
+                this.selectionInfoElement = document.getElementById('selectionInfo');
+                this.zoomLevelElement = document.getElementById('zoomLevel');
+                this.collisionWarningElement = document.getElementById('collisionWarning');
+                this.manualRoutingIndicator = document.getElementById('manualRoutingIndicator');
+                this.undoBtn = document.getElementById('undoBtn');
+                this.redoBtn = document.getElementById('redoBtn');
+                this.copyBtn = document.getElementById('copyBtn');
+                this.pasteBtn = document.getElementById('pasteBtn');
+                this.deleteBtn = document.getElementById('deleteBtn');
+                
+                // View control buttons
+                this.zoomInBtn = document.getElementById('zoomIn');
+                this.zoomOutBtn = document.getElementById('zoomOut');
+                this.fitAllBtn = document.getElementById('fitAll');
+                this.recenterBtn = document.getElementById('recenter');
+                this.viewZoomInBtn = document.getElementById('viewZoomIn');
+                this.viewZoomOutBtn = document.getElementById('viewZoomOut');
+                this.viewFitAllBtn = document.getElementById('viewFitAll');
+                this.viewRecenterBtn = document.getElementById('viewRecenter');
+                
+                // Modal elements
+                this.textModal = document.getElementById('textModal');
+                this.rectTitle = document.getElementById('rectTitle');
+                this.rectDescription = document.getElementById('rectDescription');
+                this.rectWidth = document.getElementById('rectWidth');
+                this.rectHeight = document.getElementById('rectHeight');
+                this.rectHeightSymmetry = document.getElementById('rectHeightSymmetry');
+                this.rectWidthSymmetry = document.getElementById('rectWidthSymmetry');
+                this.closeModal = document.querySelector('.close-modal');
+                this.cancelText = document.getElementById('cancelText');
+                this.saveText = document.getElementById('saveText');
+                
+                // Debug elements
+                this.debugRectId = document.getElementById('debugRectId');
+                this.debugRectPosition = document.getElementById('debugRectPosition');
+                this.debugRectSize = document.getElementById('debugRectSize');
+                this.debugConnectionPointsCount = document.getElementById('debugConnectionPointsCount');
+                this.debugConnectionPointsList = document.getElementById('debugConnectionPointsList');
+                this.debugRadiusCalculations = document.getElementById('debugRadiusCalculations');
+                this.debugOutwardPoints = document.getElementById('debugOutwardPoints');
+                
+                // Initialize all state variables
+                this.resetAllState();
+                
+                this.init();
+            }
+
+            // Reset all state to initial values
+            resetAllState() {
+                // Drawing state
+                this.currentTool = 'select';
+                this.isDrawing = false;
+                this.startX = 0;
+                this.startY = 0;
+                this.currentRect = null;
+                this.currentWire = null;
+                
+                // Selection state
+                this.selectedElement = null;
+                this.selectedElementType = null;
+                
+                // Data structures
+                this.rectangles = [];
+                this.wires = [];
+                
+                // History system
+                this.history = [];
+                this.currentHistoryIndex = -1;
+                this.maxHistorySize = 50;
+                
+                // Wire drawing state
+                this.wireStartRect = null;
+                this.wireStartPoint = null;
+                this.isDrawingWire = false;
+
+                // View state
+                this.view = {
+                    offsetX: 0,
+                    offsetY: 0,
+                    scale: 1,
+                    minScale: 0.1,
+                    maxScale: 5
+                };
+
+                // Pan state
+                this.isPanning = false;
+                this.isSpacePanning = false;
+                this.lastPanX = 0;
+                this.lastPanY = 0;
+                
+                // Move state
+                this.isMoving = false;
+                this.movingRect = null;
+                this.moveStartX = 0;
+                this.moveStartY = 0;
+                this.originalRectX = 0;
+                this.originalRectY = 0;
+                
+                // View settings
+                this.gridEnabled = true;
+                this.drawingGridSize = 20;
+                this.movingGridSize = 10;
+
+                // Routing settings
+                this.wireClearance = 20;
+                this.wireSpacing = 10;
+                this.snapDistance = 25;
+
+                // ID counter for elements
+                this.nextId = 1;
+                
+                // Clipboard for copy/paste
+                this.clipboard = null;
+                
+                // Collision detection
+                this.hasCollision = false;
+
+                // Connection point tracking
+                this.connectionPointUsage = new Map();
+
+                // Track if we're in the middle of an operation for undo/redo
+                this.operationInProgress = false;
+
+                // Manual routing mode
+                this.manualRoutingMode = false;
+                this.manualRoutingPoints = [];
+                this.isShiftPressed = false;
+                this.manualRoutingActive = false;
+            }
+
+            // Generate unique key for connection point
+            getConnectionPointKey(point) {
+                return `${point.rect.id}_${point.x}_${point.y}_${point.side}`;
+            }
+
+            // Check if connection point is available for a wire
+            isConnectionPointAvailable(point, excludeWire = null) {
+                const key = this.getConnectionPointKey(point);
+                if (!this.connectionPointUsage.has(key)) return true;
+                
+                const wireId = this.connectionPointUsage.get(key);
+                if (excludeWire && wireId === excludeWire.id) return true;
+                
+                return false;
+            }
+
+            // Reserve connection point for a wire
+            reserveConnectionPoint(point, wire) {
+                const key = this.getConnectionPointKey(point);
+                this.connectionPointUsage.set(key, wire.id);
+            }
+
+            // Release connection point reservation
+            releaseConnectionPoint(point) {
+                const key = this.getConnectionPointKey(point);
+                this.connectionPointUsage.delete(key);
+            }
+
+            // Release all connection points for a wire
+            releaseWireConnectionPoints(wire) {
+                if (wire.path && wire.path.length > 0) {
+                    this.releaseConnectionPoint(wire.startPoint);
+                    this.releaseConnectionPoint(wire.endPoint);
+                }
+            }
+
+            // Reset temporary drawing states
+            resetDrawingState() {
+                this.isDrawing = false;
+                this.isDrawingWire = false;
+                this.isMoving = false;
+                this.isPanning = false;
+                this.currentRect = null;
+                this.currentWire = null;
+                this.wireStartRect = null;
+                this.movingRect = null;
+                this.hasCollision = false;
+                this.manualRoutingMode = false;
+                this.manualRoutingPoints = [];
+                this.manualRoutingActive = false;
+                this.hideCollisionWarning();
+                this.hideManualRoutingIndicator();
+                this.canvas.style.cursor = 'crosshair';
+                this.operationInProgress = false;
+            }
+
+            generateId() {
+                return this.nextId++;
+            }
+            
+            init() {
+                this.setupCanvas();
+                this.setupEventListeners();
+                this.saveState();
+                this.draw();
+            }
+            
+            setupCanvas() {
+                const container = this.canvas.parentElement;
+                this.canvas.width = container.clientWidth;
+                this.canvas.height = container.clientHeight;
+            }
+            
+            setupEventListeners() {
+                // Tool selection
+                document.querySelectorAll('.tool-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const tool = e.target.getAttribute('data-tool');
+                        this.setTool(tool);
+                    });
+                });
+                
+                // Canvas events
+                this.canvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
+                this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+                this.canvas.addEventListener('mouseup', (e) => this.handleMouseUp(e));
+                this.canvas.addEventListener('dblclick', (e) => this.handleDoubleClick(e));
+                this.canvas.addEventListener('wheel', (e) => this.handleWheel(e));
+                
+                // Control buttons
+                document.getElementById('gridToggle').addEventListener('click', () => {
+                    this.gridEnabled = !this.gridEnabled;
+                    document.getElementById('gridToggle').textContent = 
+                        `Grid: ${this.gridEnabled ? 'ON' : 'OFF'} (G)`;
+                    this.draw();
+                });
+
+                // View control buttons
+                this.zoomInBtn.addEventListener('click', () => this.zoomIn());
+                this.zoomOutBtn.addEventListener('click', () => this.zoomOut());
+                this.fitAllBtn.addEventListener('click', () => this.fitAll());
+                this.recenterBtn.addEventListener('click', () => this.recenter());
+                this.viewZoomInBtn.addEventListener('click', () => this.zoomIn());
+                this.viewZoomOutBtn.addEventListener('click', () => this.zoomOut());
+                this.viewFitAllBtn.addEventListener('click', () => this.fitAll());
+                this.viewRecenterBtn.addEventListener('click', () => this.recenter());
+                
+                // Undo/Redo/Delete buttons
+                this.undoBtn.addEventListener('click', () => this.undo());
+                this.redoBtn.addEventListener('click', () => this.redo());
+                this.copyBtn.addEventListener('click', () => this.copySelected());
+                this.pasteBtn.addEventListener('click', () => this.pasteFromClipboard());
+                this.deleteBtn.addEventListener('click', () => this.deleteSelected());
+                
+                // Modal events
+                this.closeModal.addEventListener('click', () => this.closeTextModal());
+                this.cancelText.addEventListener('click', () => this.closeTextModal());
+                this.saveText.addEventListener('click', () => this.saveTextToRect());
+                
+                // Close modal when clicking outside
+                this.textModal.addEventListener('click', (e) => {
+                    if (e.target === this.textModal) {
+                        this.closeTextModal();
+                    }
+                });
+                
+                // Update debug info when symmetry inputs change
+                this.rectWidth.addEventListener('input', () => this.updateDebugInfo());
+                this.rectHeight.addEventListener('input', () => this.updateDebugInfo());
+                this.rectHeightSymmetry.addEventListener('input', () => this.updateDebugInfo());
+                this.rectWidthSymmetry.addEventListener('input', () => this.updateDebugInfo());
+                
+                // Spacebar panning
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === ' ' && !this.isSpacePanning) {
+                        this.isSpacePanning = true;
+                        this.canvas.style.cursor = 'grab';
+                        e.preventDefault();
+                    }
+                });
+                
+                document.addEventListener('keyup', (e) => {
+                    if (e.key === ' ') {
+                        this.isSpacePanning = false;
+                        if (!this.isPanning) {
+                            this.canvas.style.cursor = 'crosshair';
+                        }
+                        e.preventDefault();
+                    }
+                });
+                
+                // Enhanced keyboard shortcuts with proper manual routing
+                document.addEventListener('keydown', (e) => {
+                    const target = e.target;
+                    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+                        return;
+                    }
+
+                    // Shift key for manual routing
+                    if (e.key === 'Shift' && !this.isShiftPressed) {
+                        this.isShiftPressed = true;
+                        
+                        // If we're already drawing a wire and shift is pressed, switch to manual mode
+                        if (this.isDrawingWire && this.currentWire && !this.manualRoutingActive) {
+                            this.startManualRouting(this.wireStartPoint);
+                            // Convert the current automatic path to manual waypoints
+                            if (this.currentWire.path && this.currentWire.path.length > 2) {
+                                // Add intermediate points from the automatic path as manual waypoints
+                                for (let i = 1; i < this.currentWire.path.length - 1; i++) {
+                                    this.addManualRoutingPoint(this.currentWire.path[i]);
+                                }
+                            }
+                        }
+                        e.preventDefault();
+                    }
+
+                    // Escape key cancels manual routing
+                    if (e.key === 'Escape') {
+                        if (this.manualRoutingActive) {
+                            this.cancelManualRouting();
+                            this.isDrawingWire = false;
+                            this.currentWire = null;
+                            this.draw();
+                        } else {
+                            this.closeTextModal();
+                        }
+                        e.preventDefault();
+                    }
+
+                    if (e.ctrlKey) {
+                        if (e.key === 'z') {
+                            e.preventDefault();
+                            this.undo();
+                        } else if (e.key === 'y') {
+                            e.preventDefault();
+                            this.redo();
+                        } else if (e.key === 'c') {
+                            e.preventDefault();
+                            this.copySelected();
+                        } else if (e.key === 'v') {
+                            e.preventDefault();
+                            this.pasteFromClipboard();
+                        }
+                    } else {
+                        if (e.key === 'r' || e.key === 'R') {
+                            e.preventDefault();
+                            this.setTool('rectangle');
+                        }
+                        if (e.key === 's' || e.key === 'S') {
+                            e.preventDefault();
+                            this.setTool('select');
+                        }
+                        if (e.key === 'w' || e.key === 'W') {
+                            e.preventDefault();
+                            this.setTool('wire');
+                        }
+                        if (e.key === 'g' || e.key === 'G') {
+                            e.preventDefault();
+                            document.getElementById('gridToggle').click();
+                        }
+                        if (e.key === 'f' || e.key === 'F') {
+                            e.preventDefault();
+                            this.fitAll();
+                        }
+                        if (e.key === '+' || e.key === '=') {
+                            e.preventDefault();
+                            this.zoomIn();
+                        }
+                        if (e.key === '-' || e.key === '_') {
+                            e.preventDefault();
+                            this.zoomOut();
+                        }
+                        if (e.key === 'Delete' || e.key === 'Backspace') {
+                            e.preventDefault();
+                            this.deleteSelected();
+                        }
+                    }
+                });
+                
+                document.addEventListener('keyup', (e) => {
+                    if (e.key === 'Shift') {
+                        this.isShiftPressed = false;
+                        
+                        // If shift is released during manual routing, cancel it
+                        if (this.manualRoutingActive) {
+                            this.cancelManualRouting();
+                            this.isDrawingWire = false;
+                            this.currentWire = null;
+                            this.draw();
+                        }
+                        e.preventDefault();
+                    }
+                });
+                
+                window.addEventListener('resize', () => {
+                    this.setupCanvas();
+                    this.draw();
+                });
+            }
+
+            // Manual routing mode methods
+            startManualRouting(startPoint) {
+                this.manualRoutingMode = true;
+                this.manualRoutingActive = true;
+                this.manualRoutingPoints = [startPoint];
+                this.showManualRoutingIndicator();
+                console.log("Manual routing mode started with start point:", startPoint);
+            }
+
+            addManualRoutingPoint(point) {
+                if (this.manualRoutingActive) {
+                    this.manualRoutingPoints.push(point);
+                    console.log("Manual point added:", point);
+                    this.updateManualWirePreview();
+                }
+            }
+
+            completeManualRouting(endPoint) {
+                if (this.manualRoutingActive && this.manualRoutingPoints.length >= 2) {
+                    this.manualRoutingPoints.push(endPoint);
+                    
+                    // Create the final path from manual points
+                    const finalPath = [...this.manualRoutingPoints];
+                    
+                    this.manualRoutingMode = false;
+                    this.manualRoutingActive = false;
+                    this.manualRoutingPoints = [];
+                    this.hideManualRoutingIndicator();
+                    
+                    console.log("Manual routing completed with path:", finalPath);
+                    return finalPath;
+                }
+                return null;
+            }
+
+            cancelManualRouting() {
+                this.manualRoutingMode = false;
+                this.manualRoutingActive = false;
+                this.manualRoutingPoints = [];
+                this.hideManualRoutingIndicator();
+                console.log("Manual routing cancelled");
+            }
+
+            updateManualWirePreview() {
+                if (this.manualRoutingActive && this.manualRoutingPoints.length > 0) {
+                    // Update the current wire to show the manual routing path
+                    if (this.currentWire) {
+                        this.currentWire.path = [...this.manualRoutingPoints];
+                    }
+                    this.draw();
+                }
+            }
+
+            showManualRoutingIndicator() {
+                this.manualRoutingIndicator.style.display = 'block';
+            }
+
+            hideManualRoutingIndicator() {
+                this.manualRoutingIndicator.style.display = 'none';
+            }
+
+            // Update debug information in the modal
+            updateDebugInfo() {
+                if (!this.selectedElement || this.selectedElementType !== 'rectangle') return;
+                
+                const rect = this.selectedElement;
+                
+                // Update basic rectangle info
+                this.debugRectId.textContent = rect.id;
+                this.debugRectPosition.textContent = `${rect.x.toFixed(1)}, ${rect.y.toFixed(1)}`;
+                this.debugRectSize.textContent = `${rect.width} × ${rect.height}`;
+                this.debugConnectionPointsCount.textContent = rect.connectionPoints.length;
+                
+                // Update connection points list
+                if (rect.connectionPoints.length > 0) {
+                    let pointsHtml = '';
+                    rect.connectionPoints.forEach((point, index) => {
+                        pointsHtml += `
+                            <div class="connection-point-item">
+                                <strong>${index + 1}:</strong> (${point.x.toFixed(1)}, ${point.y.toFixed(1)}) - ${point.side}
+                            </div>
+                        `;
+                    });
+                    this.debugConnectionPointsList.innerHTML = pointsHtml;
+                } else {
+                    this.debugConnectionPointsList.innerHTML = 'No connection points';
+                }
+                
+                // Update radius calculations
+                let radiusInfo = '';
+                rect.connectionPoints.forEach((point, index) => {
+                    const radius = rect.calculateCycleRadius(point);
+                    const calculation = rect.getRadiusCalculation(point);
+                    radiusInfo += `Point ${index + 1} (${point.side}): ${calculation}\n`;
+                });
+                this.debugRadiusCalculations.textContent = radiusInfo || 'No radius calculations available';
+                
+                // Update outward points
+                let outwardInfo = '';
+                rect.connectionPoints.forEach((point, index) => {
+                    const outwardPoint = rect.calculateOutwardPoint(point);
+                    outwardInfo += `Point ${index + 1}: (${point.x.toFixed(1)}, ${point.y.toFixed(1)}) → (${outwardPoint.x.toFixed(1)}, ${outwardPoint.y.toFixed(1)})\n`;
+                });
+                this.debugOutwardPoints.textContent = outwardInfo || 'No outward points calculated';
+            }
+
+            // Enhanced collision detection
+            checkRectangleCollision(rect, excludeRect = null) {
+                for (const otherRect of this.rectangles) {
+                    if (excludeRect && otherRect === excludeRect) continue;
+                    
+                    if (this.rectanglesOverlap(rect, otherRect)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            rectanglesOverlap(rectA, rectB) {
+                return rectA.x < rectB.x + rectB.width &&
+                       rectA.x + rectA.width > rectB.x &&
+                       rectA.y < rectB.y + rectB.height &&
+                       rectA.y + rectA.height > rectB.y;
+            }
+
+            showCollisionWarning() {
+                this.collisionWarningElement.style.display = 'block';
+                this.hasCollision = true;
+                this.canvas.style.cursor = 'not-allowed';
+            }
+
+            hideCollisionWarning() {
+                this.collisionWarningElement.style.display = 'none';
+                this.hasCollision = false;
+                if (!this.isMoving && !this.isPanning && !this.isSpacePanning) {
+                    this.canvas.style.cursor = 'crosshair';
+                }
+            }
+
+            // Copy selected rectangle to clipboard
+            copySelected() {
+                if (this.selectedElement && this.selectedElementType === 'rectangle') {
+                    const rect = this.selectedElement;
+                    this.clipboard = {
+                        x: rect.x,
+                        y: rect.y,
+                        width: rect.width,
+                        height: rect.height,
+                        title: rect.title,
+                        description: rect.description,
+                        heightSymmetry: rect.heightSymmetry,
+                        widthSymmetry: rect.widthSymmetry,
+                        color: rect.color
+                    };
+                    this.pasteBtn.disabled = false;
+                    console.log('Copied rectangle to clipboard:', this.clipboard);
+                }
+            }
+
+            // Paste rectangle from clipboard
+            pasteFromClipboard() {
+                if (this.clipboard) {
+                    console.log('Pasting from clipboard:', this.clipboard);
+                    
+                    const newRect = new Rectangle(
+                        this.clipboard.x + 40,
+                        this.clipboard.y + 40,
+                        this.clipboard.width,
+                        this.clipboard.height,
+                        this.generateId()
+                    );
+                    
+                    // Copy properties
+                    newRect.title = this.clipboard.title || '';
+                    newRect.description = this.clipboard.description || '';
+                    newRect.heightSymmetry = this.clipboard.heightSymmetry || 1;
+                    newRect.widthSymmetry = this.clipboard.widthSymmetry || 1;
+                    newRect.color = this.clipboard.color || '#3498db';
+                    newRect.updateConnectionPoints();
+                    
+                    // Try multiple positions with increasing offsets
+                    let foundPosition = false;
+                    const baseOffsets = [
+                        {x: 40, y: 40}, {x: -40, y: 40}, {x: 40, y: -40}, {x: -40, y: -40},
+                        {x: 80, y: 80}, {x: -80, y: 80}, {x: 80, y: -80}, {x: -80, y: -80},
+                        {x: 120, y: 0}, {x: -120, y: 0}, {x: 0, y: 120}, {x: 0, y: -120}
+                    ];
+                    
+                    for (const offset of baseOffsets) {
+                        const testRect = {
+                            x: this.clipboard.x + offset.x,
+                            y: this.clipboard.y + offset.y,
+                            width: newRect.width,
+                            height: newRect.height
+                        };
+                        
+                        if (!this.checkRectangleCollision(testRect)) {
+                            newRect.x = testRect.x;
+                            newRect.y = testRect.y;
+                            this.rectangles.push(newRect);
+                            this.selectElement(newRect, 'rectangle');
+                            this.saveState();
+                            this.draw();
+                            foundPosition = true;
+                            console.log('Pasted rectangle at position:', newRect.x, newRect.y);
+                            break;
+                        }
+                    }
+                    
+                    if (!foundPosition) {
+                        // Last resort: try placing near the center of the view
+                        const center = this.screenToCanvas(this.canvas.width / 2, this.canvas.height / 2);
+                        newRect.x = this.snapToDrawingGrid(center.x);
+                        newRect.y = this.snapToDrawingGrid(center.y);
+                        
+                        if (!this.checkRectangleCollision(newRect)) {
+                            this.rectangles.push(newRect);
+                            this.selectElement(newRect, 'rectangle');
+                            this.saveState();
+                            this.draw();
+                            foundPosition = true;
+                            console.log('Pasted rectangle at center:', newRect.x, newRect.y);
+                        }
+                    }
+                    
+                    if (!foundPosition) {
+                        alert("Cannot paste - no available space without collision. Try moving some rectangles apart first.");
+                        console.log('Paste failed - no available space');
+                    }
+                } else {
+                    console.log('No clipboard data to paste');
+                }
+            }
+
+            // View control methods
+            zoomIn(factor = 1.2) {
+                this.view.scale = Math.min(this.view.maxScale, this.view.scale * factor);
+                this.updateZoomLevel();
+                this.draw();
+            }
+
+            zoomOut(factor = 1.2) {
+                this.view.scale = Math.max(this.view.minScale, this.view.scale / factor);
+                this.updateZoomLevel();
+                this.draw();
+            }
+
+            zoomToPoint(scale, x, y) {
+                const oldScale = this.view.scale;
+                this.view.scale = Math.max(this.view.minScale, Math.min(this.view.maxScale, scale));
+                
+                const zoomFactor = this.view.scale / oldScale;
+                this.view.offsetX = x - (x - this.view.offsetX) * zoomFactor;
+                this.view.offsetY = y - (y - this.view.offsetY) * zoomFactor;
+                
+                this.updateZoomLevel();
+                this.draw();
+            }
+
+            fitAll() {
+                const rectangles = this.rectangles;
+                const wires = this.wires;
+                
+                if (rectangles.length === 0 && wires.length === 0) {
+                    this.recenter();
+                    return;
+                }
+
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                
+                rectangles.forEach(rect => {
+                    minX = Math.min(minX, rect.x);
+                    minY = Math.min(minY, rect.y);
+                    maxX = Math.max(maxX, rect.x + rect.width);
+                    maxY = Math.max(maxY, rect.y + rect.height);
+                });
+                
+                wires.forEach(wire => {
+                    wire.path.forEach(point => {
+                        minX = Math.min(minX, point.x);
+                        minY = Math.min(minY, point.y);
+                        maxX = Math.max(maxX, point.x);
+                        maxY = Math.max(maxY, point.y);
+                    });
+                });
+                
+                const padding = 40;
+                minX -= padding;
+                minY -= padding;
+                maxX += padding;
+                maxY += padding;
+                
+                const contentWidth = maxX - minX;
+                const contentHeight = maxY - minY;
+                
+                const scaleX = this.canvas.width / contentWidth;
+                const scaleY = this.canvas.height / contentHeight;
+                this.view.scale = Math.min(scaleX, scaleY, 1);
+                
+                this.view.offsetX = (this.canvas.width - contentWidth * this.view.scale) / 2 - minX * this.view.scale;
+                this.view.offsetY = (this.canvas.height - contentHeight * this.view.scale) / 2 - minY * this.view.scale;
+                
+                this.updateZoomLevel();
+                this.draw();
+            }
+
+            recenter() {
+                this.view.offsetX = 0;
+                this.view.offsetY = 0;
+                this.view.scale = 1;
+                this.updateZoomLevel();
+                this.draw();
+            }
+
+            updateZoomLevel() {
+                this.zoomLevelElement.textContent = `Zoom: ${Math.round(this.view.scale * 100)}%`;
+            }
+
+            handleWheel(e) {
+                e.preventDefault();
+                const rect = this.canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                const zoomIntensity = 0.1;
+                const wheel = e.deltaY < 0 ? 1 : -1;
+                const zoom = Math.exp(wheel * zoomIntensity);
+                
+                this.zoomToPoint(this.view.scale * zoom, x, y);
+            }
+
+            // Convert between canvas coordinates and screen coordinates
+            screenToCanvas(x, y) {
+                return {
+                    x: (x - this.view.offsetX) / this.view.scale,
+                    y: (y - this.view.offsetY) / this.view.scale
+                };
+            }
+
+            canvasToScreen(x, y) {
+                return {
+                    x: x * this.view.scale + this.view.offsetX,
+                    y: y * this.view.scale + this.view.offsetY
+                };
+            }
+
+            // State management with batched operations
+            saveState() {
+                // Don't save state if we're in the middle of an operation (like moving)
+                if (this.operationInProgress) {
+                    return;
+                }
+
+                if (this.currentHistoryIndex < this.history.length - 1) {
+                    this.history = this.history.slice(0, this.currentHistoryIndex + 1);
+                }
+
+                const state = {
+                    rectangles: this.rectangles.map(rect => ({
+                        x: rect.x,
+                        y: rect.y,
+                        width: rect.width,
+                        height: rect.height,
+                        id: rect.id,
+                        color: rect.color,
+                        selected: rect.selected,
+                        title: rect.title,
+                        description: rect.description,
+                        heightSymmetry: rect.heightSymmetry,
+                        widthSymmetry: rect.widthSymmetry
+                    })),
+                    wires: this.wires.map(wire => ({
+                        id: wire.id,
+                        startPoint: wire.startPoint,
+                        endPoint: wire.endPoint,
+                        path: wire.path.map(p => ({...p})),
+                        color: wire.color,
+                        selected: wire.selected
+                    })),
+                    nextId: this.nextId,
+                    connectionPointUsage: Array.from(this.connectionPointUsage.entries())
+                };
+
+                this.history.push(state);
+                this.currentHistoryIndex++;
+                
+                if (this.history.length > this.maxHistorySize) {
+                    this.history.shift();
+                    this.currentHistoryIndex--;
+                }
+                
+                this.updateUndoRedoButtons();
+                console.log('State saved. History length:', this.history.length, 'Current index:', this.currentHistoryIndex);
+            }
+
+            undo() {
+                if (this.currentHistoryIndex > 0) {
+                    this.currentHistoryIndex--;
+                    this.restoreState(this.history[this.currentHistoryIndex]);
+                }
+            }
+
+            redo() {
+                if (this.currentHistoryIndex < this.history.length - 1) {
+                    this.currentHistoryIndex++;
+                    this.restoreState(this.history[this.currentHistoryIndex]);
+                }
+            }
+
+            restoreState(state) {
+                this.resetDrawingState();
+                
+                // Restore rectangles
+                this.rectangles = state.rectangles.map(rectData => {
+                    const rect = new Rectangle(
+                        rectData.x,
+                        rectData.y,
+                        rectData.width,
+                        rectData.height,
+                        rectData.id
+                    );
+                    rect.color = rectData.color;
+                    rect.selected = rectData.selected;
+                    rect.title = rectData.title;
+                    rect.description = rectData.description;
+                    rect.heightSymmetry = rectData.heightSymmetry;
+                    rect.widthSymmetry = rectData.widthSymmetry;
+                    rect.updateConnectionPoints();
+                    return rect;
+                });
+                
+                this.nextId = state.nextId || 1;
+                
+                // Restore wires
+                this.wires = state.wires.map(wire => {
+                    // Find the rectangles for the connection points
+                    const startRect = this.rectangles.find(r => r.id === wire.startPoint.rect.id);
+                    const endRect = this.rectangles.find(r => r.id === wire.endPoint.rect.id);
+                    
+                    if (!startRect || !endRect) {
+                        console.warn('Could not find connected rectangles for wire during state restoration');
+                        return null;
+                    }
+                    
+                    // Find the actual connection points in the restored rectangles
+                    const startPoint = startRect.connectionPoints.find(p => 
+                        p.x === wire.startPoint.x && 
+                        p.y === wire.startPoint.y && 
+                        p.side === wire.startPoint.side
+                    );
+                    
+                    const endPoint = endRect.connectionPoints.find(p => 
+                        p.x === wire.endPoint.x && 
+                        p.y === wire.endPoint.y && 
+                        p.side === wire.endPoint.side
+                    );
+                    
+                    if (!startPoint || !endPoint) {
+                        console.warn('Could not find connection points for wire during state restoration');
+                        return null;
+                    }
+                    
+                    return {
+                        id: wire.id,
+                        startPoint: startPoint,
+                        endPoint: endPoint,
+                        path: wire.path.map(p => ({...p})),
+                        color: wire.color,
+                        selected: wire.selected
+                    };
+                }).filter(wire => wire !== null);
+                
+                // Restore connection point usage
+                this.connectionPointUsage = new Map(state.connectionPointUsage || []);
+                
+                this.deselectAll();
+                this.draw();
+                this.updateUndoRedoButtons();
+            }
+
+            updateUndoRedoButtons() {
+                this.undoBtn.disabled = this.currentHistoryIndex <= 0;
+                this.redoBtn.disabled = this.currentHistoryIndex >= this.history.length - 1;
+                this.copyBtn.disabled = !(this.selectedElement && this.selectedElementType === 'rectangle');
+                this.pasteBtn.disabled = !this.clipboard;
+            }
+            
+            // Text modal methods
+            openTextModal(rectangle) {
+                this.rectTitle.value = rectangle.title || '';
+                this.rectDescription.value = rectangle.description || '';
+                this.rectWidth.value = rectangle.width;
+                this.rectHeight.value = rectangle.height;
+                this.rectHeightSymmetry.value = rectangle.heightSymmetry;
+                this.rectWidthSymmetry.value = rectangle.widthSymmetry;
+                this.selectedElement = rectangle;
+                this.textModal.style.display = 'flex';
+                
+                // Update debug information
+                this.updateDebugInfo();
+                
+                setTimeout(() => {
+                    this.rectTitle.focus();
+                }, 100);
+            }
+            
+            closeTextModal() {
+                this.textModal.style.display = 'none';
+                this.selectedElement = null;
+            }
+            
+            saveTextToRect() {
+                if (this.selectedElement && this.selectedElementType === 'rectangle') {
+                    const rect = this.selectedElement;
+                    const oldWidth = rect.width;
+                    const oldHeight = rect.height;
+                    const oldHeightSymmetry = rect.heightSymmetry;
+                    const oldWidthSymmetry = rect.widthSymmetry;
+                    
+                    rect.title = this.rectTitle.value;
+                    rect.description = this.rectDescription.value;
+                    rect.width = parseInt(this.rectWidth.value) || 100;
+                    rect.height = parseInt(this.rectHeight.value) || 100;
+                    rect.heightSymmetry = parseInt(this.rectHeightSymmetry.value) || 0;
+                    rect.widthSymmetry = parseInt(this.rectWidthSymmetry.value) || 0;
+                    
+                    // Check if the rectangle would collide with its new size
+                    const testRect = {
+                        x: rect.x,
+                        y: rect.y,
+                        width: rect.width,
+                        height: rect.height
+                    };
+                    
+                    const hasCollision = this.checkRectangleCollision(testRect, rect);
+                    
+                    if (hasCollision) {
+                        alert("Cannot resize rectangle - it would cause a collision with another rectangle.");
+                        // Revert to original size
+                        rect.width = oldWidth;
+                        rect.height = oldHeight;
+                    } else {
+                        // Update connection points if size or symmetry changed
+                        if (oldWidth !== rect.width || oldHeight !== rect.height || 
+                            oldHeightSymmetry !== rect.heightSymmetry || oldWidthSymmetry !== rect.widthSymmetry) {
+                            rect.updateConnectionPoints();
+                            
+                            // Update all wires connected to this rectangle
+                            this.updateConnectedWires(rect);
+                        }
+                        
+                        this.saveState();
+                        this.draw();
+                    }
+                }
+                this.closeTextModal();
+            }
+            
+            handleDoubleClick(e) {
+                if (this.currentTool === 'select') {
+                    const rect = this.canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    
+                    const canvasPos = this.screenToCanvas(x, y);
+                    const elementAtPoint = this.getElementAt(canvasPos.x, canvasPos.y);
+                    if (elementAtPoint && elementAtPoint.type === 'rectangle') {
+                        this.selectElement(elementAtPoint.element, elementAtPoint.type);
+                        this.openTextModal(elementAtPoint.element);
+                    }
+                }
+            }
+            
+            // Selection methods
+            selectElement(element, type) {
+                this.deselectAll();
+                this.selectedElement = element;
+                this.selectedElementType = type;
+                element.selected = true;
+                
+                if (type === 'rectangle') {
+                    const info = element.title ? `"${element.title}"` : 'Rectangle';
+                    this.selectionInfoElement.textContent = `Selected: ${info} (${element.width}x${element.height})`;
+                } else if (type === 'wire') {
+                    this.selectionInfoElement.textContent = 'Selected: Wire';
+                }
+                
+                this.deleteBtn.disabled = false;
+                // Copy should be enabled for rectangles, disabled for wires
+                this.copyBtn.disabled = (type !== 'rectangle');
+                this.updateUndoRedoButtons();
+                this.draw();
+            }
+            
+            deselectAll() {
+                this.rectangles.forEach(rect => {
+                    rect.selected = false;
+                });
+                
+                this.wires.forEach(wire => {
+                    wire.selected = false;
+                });
+                
+                this.selectedElement = null;
+                this.selectedElementType = null;
+                this.selectionInfoElement.textContent = 'No selection';
+                this.deleteBtn.disabled = true;
+                this.copyBtn.disabled = true;
+                this.updateUndoRedoButtons();
+            }
+            
+            deleteSelected() {
+                if (this.selectedElement && this.selectedElementType) {
+                    if (this.selectedElementType === 'rectangle') {
+                        const index = this.rectangles.indexOf(this.selectedElement);
+                        if (index > -1) {
+                            this.rectangles.splice(index, 1);
+                            
+                            for (let i = this.wires.length - 1; i >= 0; i--) {
+                                if (this.wires[i].startPoint.rect === this.selectedElement || 
+                                    this.wires[i].endPoint.rect === this.selectedElement) {
+                                    this.releaseWireConnectionPoints(this.wires[i]);
+                                    this.wires.splice(i, 1);
+                                }
+                            }
+                        }
+                    } else if (this.selectedElementType === 'wire') {
+                        const index = this.wires.indexOf(this.selectedElement);
+                        if (index > -1) {
+                            this.releaseWireConnectionPoints(this.selectedElement);
+                            this.wires.splice(index, 1);
+                        }
+                    }
+                    
+                    this.saveState();
+                    this.deselectAll();
+                    this.draw();
+                }
+            }
+            
+            getElementAt(x, y) {
+                for (let i = this.rectangles.length - 1; i >= 0; i--) {
+                    const rect = this.rectangles[i];
+                    if (x >= rect.x && x <= rect.x + rect.width &&
+                        y >= rect.y && y <= rect.y + rect.height) {
+                        return { element: rect, type: 'rectangle' };
+                    }
+                }
+                
+                for (let i = this.wires.length - 1; i >= 0; i--) {
+                    const wire = this.wires[i];
+                    for (let j = 0; j < wire.path.length - 1; j++) {
+                        if (this.isPointNearLine(x, y, wire.path[j], wire.path[j+1], 5 / this.view.scale)) {
+                            return { element: wire, type: 'wire' };
+                        }
+                    }
+                }
+                
+                return null;
+            }
+            
+            isPointNearLine(px, py, lineStart, lineEnd, tolerance) {
+                const A = px - lineStart.x;
+                const B = py - lineStart.y;
+                const C = lineEnd.x - lineStart.x;
+                const D = lineEnd.y - lineStart.y;
+                
+                const dot = A * C + B * D;
+                const lenSq = C * C + D * D;
+                let param = -1;
+                
+                if (lenSq !== 0) {
+                    param = dot / lenSq;
+                }
+                
+                let xx, yy;
+                
+                if (param < 0) {
+                    xx = lineStart.x;
+                    yy = lineStart.y;
+                } else if (param > 1) {
+                    xx = lineEnd.x;
+                    yy = lineEnd.y;
+                } else {
+                    xx = lineStart.x + param * C;
+                    yy = lineStart.y + param * D;
+                }
+                
+                const dx = px - xx;
+                const dy = py - yy;
+                return Math.sqrt(dx * dx + dy * dy) <= tolerance;
+            }
+            
+            setTool(tool) {
+                this.currentTool = tool;
+                
+                document.querySelectorAll('.tool-btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.getAttribute('data-tool') === tool);
+                });
+                
+                this.currentToolElement.textContent = `Current Tool: ${tool.charAt(0).toUpperCase() + tool.slice(1)}`;
+                document.getElementById('selectedTool').textContent = `Selected Tool: ${tool.charAt(0).toUpperCase() + tool.slice(1)}`;
+                
+                this.resetDrawingState();
+                this.draw();
+            }
+            
+            // Enhanced snap detection with consistent outward cycle for both start and end points
+            findSnapConnectionPoint(x, y, excludeRect = null) {
+                let closestPoint = null;
+                let closestDistance = Infinity;
+                
+                for (const rect of this.rectangles) {
+                    if (rect === excludeRect) continue;
+                    
+                    for (const point of rect.connectionPoints) {
+                        // Calculate the cycle radius for this specific point
+                        const cycleRadius = rect.calculateCycleRadius(point);
+                        
+                        // Calculate the outward point (edge of the cycle)
+                        const outwardPoint = rect.calculateOutwardPoint(point);
+                        
+                        // Calculate distance to the outward point (edge of cycle)
+                        const dx = x - outwardPoint.x;
+                        const dy = y - outwardPoint.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        
+                        // Check if point is within the cycle radius from the OUTWARD point
+                        // This makes the snapping area consistent for both start and end points
+                        if (distance <= cycleRadius && distance < closestDistance) {
+                            closestDistance = distance;
+                            closestPoint = point;
+                        }
+                    }
+                }
+                
+                return closestPoint;
+            }
+            
+            // ENHANCED: Orthogonal path calculation with improved obstacle avoidance
+            calculateOptimalOrthogonalPath(startPoint, endPoint, allObstacles, excludeWire = null) {
+                const startRect = startPoint.rect;
+                const endRect = endPoint.rect;
+                
+                // Calculate outward points for routing - these are at the edge of the cycles
+                const startOutward = startRect.calculateOutwardPoint(startPoint);
+                const endOutward = endRect.calculateOutwardPoint(endPoint);
+                
+                // Snap outward points to grid for cleaner routing
+                const snappedStartOutward = {
+                    x: this.snapToMovingGrid(startOutward.x),
+                    y: this.snapToMovingGrid(startOutward.y)
+                };
+                
+                const snappedEndOutward = {
+                    x: this.snapToMovingGrid(endOutward.x),
+                    y: this.snapToMovingGrid(endOutward.y)
+                };
+                
+                // Get bounding box of all obstacles to understand the routing area
+                const bounds = this.calculateObstacleBounds(allObstacles, startRect, endRect);
+                
+                // Generate path strategies with improved obstacle avoidance
+                const pathStrategies = this.generateEnhancedPathStrategies(
+                    startPoint, snappedStartOutward, endPoint, snappedEndOutward, bounds
+                );
+                
+                // Score and select the best valid path
+                const scoredPaths = [];
+                
+                for (const path of pathStrategies) {
+                    // Validate path is orthogonal and moves forward
+                    if (!this.isPathValid(path)) {
+                        continue;
+                    }
+                    
+                    // Check for collisions - this is the PRIMARY requirement
+                    const isClear = this.isPathClear(path, allObstacles, startRect, endRect, excludeWire);
+                    
+                    if (isClear) {
+                        const pathLength = this.calculatePathLength(path);
+                        const turnCount = this.countTurns(path);
+                        const detourFactor = this.calculateDetourFactor(path, startOutward, endOutward);
+                        
+                        // Enhanced scoring: prioritize fewer turns, then reasonable detour, then shorter distance
+                        const score = (turnCount * 1000) + (detourFactor * 10) + pathLength;
+                        
+                        scoredPaths.push({
+                            path: path,
+                            score: score,
+                            turns: turnCount,
+                            length: pathLength,
+                            detour: detourFactor,
+                            clear: true
+                        });
+                    }
+                }
+                
+                // If we have valid paths, return the best one
+                if (scoredPaths.length > 0) {
+                    // Sort by score (lower is better)
+                    scoredPaths.sort((a, b) => a.score - b.score);
+                    return scoredPaths[0].path;
+                }
+                
+                // If no valid paths found, try more aggressive routing
+                console.log("No clear paths found, trying aggressive routing...");
+                const aggressivePaths = this.generateAggressivePaths(
+                    startPoint, snappedStartOutward, endPoint, snappedEndOutward, bounds
+                );
+                
+                for (const path of aggressivePaths) {
+                    if (!this.isPathValid(path)) continue;
+                    
+                    const isClear = this.isPathClear(path, allObstacles, startRect, endRect, excludeWire);
+                    
+                    if (isClear) {
+                        const pathLength = this.calculatePathLength(path);
+                        const turnCount = this.countTurns(path);
+                        const detourFactor = this.calculateDetourFactor(path, startOutward, endOutward);
+                        const score = (turnCount * 1000) + (detourFactor * 10) + pathLength;
+                        
+                        scoredPaths.push({
+                            path: path,
+                            score: score,
+                            turns: turnCount,
+                            length: pathLength,
+                            detour: detourFactor,
+                            clear: true
+                        });
+                    }
+                }
+                
+                // Return the best aggressive path if available
+                if (scoredPaths.length > 0) {
+                    scoredPaths.sort((a, b) => a.score - b.score);
+                    return scoredPaths[0].path;
+                }
+                
+                // Final fallback: as a last resort, allow paths that might have minor collisions
+                // but ensure they connect the rectangles
+                console.log("Trying fallback routing...");
+                const fallbackPath = this.createFallbackPath(startPoint, startOutward, endPoint, endOutward, bounds);
+                if (fallbackPath && this.isPathValid(fallbackPath)) {
+                    return fallbackPath;
+                }
+                
+                return null;
+            }
+
+            // Calculate the bounding box of all obstacles plus start/end points
+            calculateObstacleBounds(allObstacles, startRect, endRect) {
+                let minX = Math.min(startRect.x, endRect.x);
+                let minY = Math.min(startRect.y, endRect.y);
+                let maxX = Math.max(startRect.x + startRect.width, endRect.x + endRect.width);
+                let maxY = Math.max(startRect.y + startRect.height, endRect.y + endRect.height);
+                
+                for (const obstacle of allObstacles) {
+                    minX = Math.min(minX, obstacle.x);
+                    minY = Math.min(minY, obstacle.y);
+                    maxX = Math.max(maxX, obstacle.x + obstacle.width);
+                    maxY = Math.max(maxY, obstacle.y + obstacle.height);
+                }
+                
+                // Add padding for routing
+                const padding = this.wireClearance * 3;
+                return {
+                    minX: minX - padding,
+                    minY: minY - padding,
+                    maxX: maxX + padding,
+                    maxY: maxY + padding
+                };
+            }
+
+            // Calculate how much a path detours from the direct route
+            calculateDetourFactor(path, start, end) {
+                const directDistance = Math.abs(start.x - end.x) + Math.abs(start.y - end.y);
+                const pathDistance = this.calculatePathLength(path);
+                return pathDistance / Math.max(directDistance, 1);
+            }
+
+            // ENHANCED: Generate paths with better obstacle avoidance
+            generateEnhancedPathStrategies(startPoint, startOutward, endPoint, endOutward, bounds) {
+                const strategies = [];
+                const clearance = this.wireClearance;
+                
+                const startX = startOutward.x;
+                const startY = startOutward.y;
+                const endX = endOutward.x;
+                const endY = endOutward.y;
+                
+                // Basic L-shaped paths
+                strategies.push([startPoint, startOutward, { x: endX, y: startY }, endOutward, endPoint]);
+                strategies.push([startPoint, startOutward, { x: startX, y: endY }, endOutward, endPoint]);
+                
+                // U-shaped paths with clearance in all directions
+                const directions = [
+                    { x: 0, y: -clearance },  // up
+                    { x: 0, y: clearance },   // down
+                    { x: -clearance, y: 0 },  // left
+                    { x: clearance, y: 0 }    // right
+                ];
+                
+                for (const dir of directions) {
+                    strategies.push([
+                        startPoint, startOutward,
+                        { x: startX + dir.x, y: startY + dir.y },
+                        { x: endX + dir.x, y: endY + dir.y },
+                        endOutward, endPoint
+                    ]);
+                }
+                
+                // Extended routing around obstacles - go far around if needed
+                const farClearance = this.wireClearance * 4;
+                
+                // Paths that go above all obstacles
+                strategies.push([
+                    startPoint, startOutward,
+                    { x: startX, y: bounds.minY },
+                    { x: endX, y: bounds.minY },
+                    endOutward, endPoint
+                ]);
+                
+                // Paths that go below all obstacles
+                strategies.push([
+                    startPoint, startOutward,
+                    { x: startX, y: bounds.maxY },
+                    { x: endX, y: bounds.maxY },
+                    endOutward, endPoint
+                ]);
+                
+                // Paths that go left of all obstacles
+                strategies.push([
+                    startPoint, startOutward,
+                    { x: bounds.minX, y: startY },
+                    { x: bounds.minX, y: endY },
+                    endOutward, endPoint
+                ]);
+                
+                // Paths that go right of all obstacles
+                strategies.push([
+                    startPoint, startOutward,
+                    { x: bounds.maxX, y: startY },
+                    { x: bounds.maxX, y: endY },
+                    endOutward, endPoint
+                ]);
+                
+                // Multi-segment paths for complex routing
+                strategies.push(...this.generateMultiSegmentPaths(
+                    startPoint, startOutward, endPoint, endOutward, bounds
+                ));
+                
+                return strategies;
+            }
+
+            // Generate multi-segment paths for complex obstacle avoidance
+            generateMultiSegmentPaths(startPoint, startOutward, endPoint, endOutward, bounds) {
+                const multiPaths = [];
+                const farClearance = this.wireClearance * 6;
+                
+                const startX = startOutward.x;
+                const startY = startOutward.y;
+                const endX = endOutward.x;
+                const endY = endOutward.y;
+                
+                // Path: Start → Far Left → Far Top → Far Right → End
+                multiPaths.push([
+                    startPoint, startOutward,
+                    { x: bounds.minX, y: startY },
+                    { x: bounds.minX, y: bounds.minY },
+                    { x: bounds.maxX, y: bounds.minY },
+                    { x: bounds.maxX, y: endY },
+                    endOutward, endPoint
+                ]);
+                
+                // Path: Start → Far Left → Far Bottom → Far Right → End
+                multiPaths.push([
+                    startPoint, startOutward,
+                    { x: bounds.minX, y: startY },
+                    { x: bounds.minX, y: bounds.maxY },
+                    { x: bounds.maxX, y: bounds.maxY },
+                    { x: bounds.maxX, y: endY },
+                    endOutward, endPoint
+                ]);
+                
+                // Path: Start → Far Top → Far Left → Far Bottom → End
+                multiPaths.push([
+                    startPoint, startOutward,
+                    { x: startX, y: bounds.minY },
+                    { x: bounds.minX, y: bounds.minY },
+                    { x: bounds.minX, y: bounds.maxY },
+                    { x: endX, y: bounds.maxY },
+                    endOutward, endPoint
+                ]);
+                
+                // Path: Start → Far Top → Far Right → Far Bottom → End
+                multiPaths.push([
+                    startPoint, startOutward,
+                    { x: startX, y: bounds.minY },
+                    { x: bounds.maxX, y: bounds.minY },
+                    { x: bounds.maxX, y: bounds.maxY },
+                    { x: endX, y: bounds.maxY },
+                    endOutward, endPoint
+                ]);
+                
+                return multiPaths;
+            }
+
+            // Generate aggressive routing paths
+            generateAggressivePaths(startPoint, startOutward, endPoint, endOutward, bounds) {
+                const aggressive = [];
+                const farClearance = this.wireClearance * 8;
+                
+                // Create even larger bounds for extreme routing
+                const extremeBounds = {
+                    minX: bounds.minX - farClearance,
+                    minY: bounds.minY - farClearance,
+                    maxX: bounds.maxX + farClearance,
+                    maxY: bounds.maxY + farClearance
+                };
+                
+                // Generate paths using the extreme bounds
+                aggressive.push(...this.generateMultiSegmentPaths(
+                    startPoint, startOutward, endPoint, endOutward, extremeBounds
+                ));
+                
+                return aggressive;
+            }
+
+            // Create a fallback path when all else fails
+            createFallbackPath(startPoint, startOutward, endPoint, endOutward, bounds) {
+                // Use a multi-segment path that should work in most cases
+                return [
+                    startPoint, startOutward,
+                    { x: startOutward.x, y: bounds.minY },
+                    { x: endOutward.x, y: bounds.minY },
+                    endOutward, endPoint
+                ];
+            }
+
+            // Enhanced path validation that checks for 180-degree turns
+            isPathValid(path) {
+                if (!this.isPathOrthogonal(path)) {
+                    return false;
+                }
+                
+                // Check for 180-degree turns (backtracking)
+                for (let i = 0; i < path.length - 2; i++) {
+                    const segment1 = this.getSegmentDirection(path[i], path[i + 1]);
+                    const segment2 = this.getSegmentDirection(path[i + 1], path[i + 2]);
+                    
+                    // If both segments are in the same direction but opposite orientation, it's backtracking
+                    if (segment1.direction === segment2.direction && 
+                        segment1.orientation !== segment2.orientation) {
+                        return false;
+                    }
+                }
+                
+                return true;
+            }
+
+            // Get the direction and orientation of a segment
+            getSegmentDirection(point1, point2) {
+                const dx = point2.x - point1.x;
+                const dy = point2.y - point1.y;
+                
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    // Horizontal segment
+                    return {
+                        direction: 'horizontal',
+                        orientation: dx > 0 ? 'right' : 'left'
+                    };
+                } else {
+                    // Vertical segment
+                    return {
+                        direction: 'vertical', 
+                        orientation: dy > 0 ? 'down' : 'up'
+                    };
+                }
+            }
+
+            // Count the number of turns in a path
+            countTurns(path) {
+                if (path.length < 3) return 0;
+                
+                let turns = 0;
+                for (let i = 1; i < path.length - 1; i++) {
+                    const prev = path[i-1];
+                    const curr = path[i];
+                    const next = path[i+1];
+                    
+                    // Check if direction changes
+                    const prevHorizontal = Math.abs(prev.y - curr.y) < 0.001;
+                    const nextHorizontal = Math.abs(curr.y - next.y) < 0.001;
+                    
+                    if (prevHorizontal !== nextHorizontal) {
+                        turns++;
+                    }
+                }
+                return turns;
+            }
+
+            calculatePathLength(path) {
+                let length = 0;
+                for (let i = 0; i < path.length - 1; i++) {
+                    length += Math.abs(path[i].x - path[i+1].x) + Math.abs(path[i].y - path[i+1].y);
+                }
+                return length;
+            }
+
+            // Check if path is orthogonal
+            isPathOrthogonal(path) {
+                for (let i = 0; i < path.length - 1; i++) {
+                    const current = path[i];
+                    const next = path[i + 1];
+                    
+                    const isHorizontal = Math.abs(current.y - next.y) < 0.001;
+                    const isVertical = Math.abs(current.x - next.x) < 0.001;
+                    
+                    if (!isHorizontal && !isVertical) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            
+            // Check if path is clear of obstacles with STRICT avoidance
+            isPathClear(path, obstacles, startRect, endRect, excludeWire = null) {
+                for (let i = 0; i < path.length - 1; i++) {
+                    const p1 = path[i];
+                    const p2 = path[i + 1];
+                    
+                    for (const obstacle of obstacles) {
+                        // Skip the connected rectangles for connection segments
+                        const isFirstSegment = (i === 0);
+                        const isLastSegment = (i === path.length - 2);
+                        
+                        // Skip collision checking for segments connected to the rectangles
+                        // The first segment (connection point to outward point) is always allowed
+                        // The last segment (outward point to connection point) is always allowed
+                        if ((isFirstSegment && obstacle === startRect) || (isLastSegment && obstacle === endRect)) {
+                            continue;
+                        }
+                        
+                        // STRICT CHECK: No segment should intersect any rectangle at all
+                        if (this.doesSegmentIntersectRectangle(p1, p2, obstacle)) {
+                            return false;
+                        }
+                    }
+                    
+                    // Also check for intersection with other wires
+                    for (const wire of this.wires) {
+                        if (excludeWire && wire === excludeWire) continue;
+                        
+                        for (let j = 0; j < wire.path.length - 1; j++) {
+                            if (this.segmentsIntersect(
+                                p1.x, p1.y, p2.x, p2.y,
+                                wire.path[j].x, wire.path[j].y, wire.path[j+1].x, wire.path[j+1].y
+                            )) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+                return true;
+            }
+            
+            // Check if segment intersects rectangle
+            doesSegmentIntersectRectangle(p1, p2, rect) {
+                // Check if either endpoint is inside the rectangle
+                if (this.isPointInRectangle(p1.x, p1.y, rect) || this.isPointInRectangle(p2.x, p2.y, rect)) {
+                    return true;
+                }
+                
+                // Check for intersection with rectangle edges
+                const edges = [
+                    { x1: rect.x, y1: rect.y, x2: rect.x + rect.width, y2: rect.y },
+                    { x1: rect.x + rect.width, y1: rect.y, x2: rect.x + rect.width, y2: rect.y + rect.height },
+                    { x1: rect.x, y1: rect.y + rect.height, x2: rect.x + rect.width, y2: rect.y + rect.height },
+                    { x1: rect.x, y1: rect.y, x2: rect.x, y2: rect.y + rect.height }
+                ];
+                
+                for (const edge of edges) {
+                    if (this.segmentsIntersect(p1.x, p1.y, p2.x, p2.y, edge.x1, edge.y1, edge.x2, edge.y2)) {
+                        return true;
+                    }
+                }
+                
+                return false;
+            }
+            
+            // Check if a point is in a rectangle
+            isPointInRectangle(x, y, rect) {
+                return x >= rect.x && x <= rect.x + rect.width &&
+                       y >= rect.y && y <= rect.y + rect.height;
+            }
+            
+            // Check if two segments intersect
+            segmentsIntersect(x1, y1, x2, y2, x3, y3, x4, y4) {
+                const denominator = ((y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1));
+                if (denominator === 0) return false;
+
+                const ua = ((x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3)) / denominator;
+                const ub = ((x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3)) / denominator;
+
+                return ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1;
+            }
+
+            // Create a simple path that moves forward without backtracking
+            createSimpleForwardPath(startPoint, startOutward, mousePos) {
+                const dx = mousePos.x - startOutward.x;
+                const dy = mousePos.y - startOutward.y;
+                
+                // Determine primary movement direction
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    // Move horizontally first, then vertically
+                    return [
+                        startPoint,
+                        startOutward,
+                        { x: mousePos.x, y: startOutward.y },
+                        { x: mousePos.x, y: mousePos.y }
+                    ];
+                } else {
+                    // Move vertically first, then horizontally  
+                    return [
+                        startPoint,
+                        startOutward,
+                        { x: startOutward.x, y: mousePos.y },
+                        { x: mousePos.x, y: mousePos.y }
+                    ];
+                }
+            }
+
+            // Enhanced wire updating that properly moves wires with rectangles
+            updateConnectedWires(modifiedRectangle) {
+                // First, update the connection points for the modified rectangle
+                modifiedRectangle.updateConnectionPoints();
+                
+                // Then, release all connection points for wires connected to this rectangle
+                for (let i = this.wires.length - 1; i >= 0; i--) {
+                    const wire = this.wires[i];
+                    const isStartConnected = wire.startPoint.rect === modifiedRectangle;
+                    const isEndConnected = wire.endPoint.rect === modifiedRectangle;
+                    
+                    if (isStartConnected || isEndConnected) {
+                        // Release the connection points
+                        this.releaseConnectionPoint(wire.startPoint);
+                        this.releaseConnectionPoint(wire.endPoint);
+                        
+                        // Find the new connection points using the UPDATED connection points
+                        let newStartPoint = wire.startPoint;
+                        let newEndPoint = wire.endPoint;
+                        
+                        if (isStartConnected) {
+                            // Find the closest connection point on the modified rectangle using the UPDATED points
+                            newStartPoint = this.findClosestConnectionPoint(modifiedRectangle, wire.startPoint);
+                        }
+                        
+                        if (isEndConnected) {
+                            // Find the closest connection point on the modified rectangle using the UPDATED points
+                            newEndPoint = this.findClosestConnectionPoint(modifiedRectangle, wire.endPoint);
+                        }
+                        
+                        // If we found valid connection points, update the wire
+                        if (newStartPoint && newEndPoint) {
+                            // Check if the connection points are available
+                            if (this.isConnectionPointAvailable(newStartPoint, wire) && 
+                                this.isConnectionPointAvailable(newEndPoint, wire)) {
+                                
+                                // Calculate new path
+                                const newPath = this.calculateOptimalOrthogonalPath(
+                                    newStartPoint, 
+                                    newEndPoint, 
+                                    this.rectangles,
+                                    wire
+                                );
+                                
+                                if (newPath) {
+                                    // Update the wire
+                                    wire.startPoint = newStartPoint;
+                                    wire.endPoint = newEndPoint;
+                                    wire.path = newPath;
+                                    
+                                    // Reserve the new connection points
+                                    this.reserveConnectionPoint(newStartPoint, wire);
+                                    this.reserveConnectionPoint(newEndPoint, wire);
+                                } else {
+                                    // If no valid path, remove the wire
+                                    this.wires.splice(i, 1);
+                                }
+                            } else {
+                                // If connection points are not available, remove the wire
+                                this.wires.splice(i, 1);
+                            }
+                        } else {
+                            // If no valid connection points found, remove the wire
+                            this.wires.splice(i, 1);
+                        }
+                    }
+                }
+                
+                // Don't save state here - let the caller handle it
+                this.draw();
+            }
+
+            // Find the closest connection point on a rectangle to a reference point
+            findClosestConnectionPoint(rect, referencePoint) {
+                let closestPoint = null;
+                let closestDistance = Infinity;
+                
+                // Use the CURRENT connection points of the rectangle
+                for (const point of rect.connectionPoints) {
+                    const dx = point.x - referencePoint.x;
+                    const dy = point.y - referencePoint.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    // Also consider side compatibility
+                    const sideBonus = point.side === referencePoint.side ? 0.5 : 1;
+                    const weightedDistance = distance * sideBonus;
+                    
+                    if (weightedDistance < closestDistance) {
+                        closestDistance = weightedDistance;
+                        closestPoint = point;
+                    }
+                }
+                
+                return closestPoint;
+            }
+            
+            // FIXED: Enhanced mouse event handling with proper connection point snapping for manual routing
+            handleMouseDown(e) {
+                const rect = this.canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const canvasPos = this.screenToCanvas(x, y);
+                
+                // Middle mouse button or spacebar + left click for panning
+                if (e.button === 1 || (e.button === 0 && this.isSpacePanning)) {
+                    e.preventDefault();
+                    this.isPanning = true;
+                    this.lastPanX = x;
+                    this.lastPanY = y;
+                    this.canvas.style.cursor = 'grabbing';
+                    return;
+                }
+                
+                if (this.currentTool === 'select') {
+                    const elementAtPoint = this.getElementAt(canvasPos.x, canvasPos.y);
+                    if (elementAtPoint) {
+                        this.selectElement(elementAtPoint.element, elementAtPoint.type);
+                        
+                        if (elementAtPoint.type === 'rectangle') {
+                            this.isMoving = true;
+                            this.movingRect = elementAtPoint.element;
+                            this.originalRectX = this.movingRect.x;
+                            this.originalRectY = this.movingRect.y;
+                            this.moveStartX = canvasPos.x;
+                            this.moveStartY = canvasPos.y;
+                            this.canvas.style.cursor = 'grabbing';
+                            
+                            this.operationInProgress = true;
+                        }
+                    } else {
+                        this.deselectAll();
+                    }
+                }
+                else if (this.currentTool === 'rectangle') {
+                    this.isDrawing = true;
+                    this.startX = this.snapToDrawingGrid(canvasPos.x);
+                    this.startY = this.snapToDrawingGrid(canvasPos.y);
+                    
+                    this.currentRect = {
+                        x: this.startX,
+                        y: this.startY,
+                        width: 0,
+                        height: 0
+                    };
+                    this.draw();
+                }
+                else if (this.currentTool === 'wire') {
+                    // FIXED: Always check for connection point snapping first
+                    const snapPoint = this.findSnapConnectionPoint(canvasPos.x, canvasPos.y);
+                    
+                    if (this.isShiftPressed) {
+                        // Manual routing mode
+                        if (snapPoint && !this.isDrawingWire) {
+                            // Start manual routing from a connection point
+                            this.isDrawingWire = true;
+                            this.wireStartRect = snapPoint.rect;
+                            this.wireStartPoint = snapPoint;
+                            this.startManualRouting(snapPoint);
+                            
+                            this.currentWire = {
+                                startPoint: this.wireStartPoint,
+                                endPoint: { x: canvasPos.x, y: canvasPos.y, rect: null },
+                                path: [snapPoint],
+                                temp: true,
+                                manual: true
+                            };
+                            console.log("Manual routing started from connection point");
+                        }
+                        else if (this.manualRoutingActive && snapPoint && snapPoint.rect !== this.wireStartRect) {
+                            // Complete manual routing by snapping to target connection point
+                            const finalPath = this.completeManualRouting(snapPoint);
+                            
+                            if (finalPath && this.isConnectionPointAvailable(this.wireStartPoint) &&
+                                this.isConnectionPointAvailable(snapPoint)) {
+                                
+                                const finalWire = {
+                                    id: this.generateId(),
+                                    startPoint: this.wireStartPoint,
+                                    endPoint: snapPoint,
+                                    path: finalPath,
+                                    color: '#2c3e50',
+                                    selected: false
+                                };
+                                
+                                this.reserveConnectionPoint(this.wireStartPoint, finalWire);
+                                this.reserveConnectionPoint(snapPoint, finalWire);
+                                
+                                this.wires.push(finalWire);
+                                this.saveState();
+                                console.log("Manual wire completed to connection point");
+                            }
+                            
+                            this.isDrawingWire = false;
+                            this.wireStartRect = null;
+                            this.currentWire = null;
+                            this.draw();
+                        }
+                        else if (this.manualRoutingActive) {
+                            // Add manual waypoint (snapped to grid)
+                            const waypoint = { 
+                                x: this.snapToMovingGrid(canvasPos.x), 
+                                y: this.snapToMovingGrid(canvasPos.y) 
+                            };
+                            this.addManualRoutingPoint(waypoint);
+                            console.log("Manual waypoint added");
+                        }
+                        else if (!this.isDrawingWire && snapPoint) {
+                            // Start manual routing if we clicked on a connection point but weren't already drawing
+                            this.isDrawingWire = true;
+                            this.wireStartRect = snapPoint.rect;
+                            this.wireStartPoint = snapPoint;
+                            this.startManualRouting(snapPoint);
+                            
+                            this.currentWire = {
+                                startPoint: this.wireStartPoint,
+                                endPoint: { x: canvasPos.x, y: canvasPos.y, rect: null },
+                                path: [snapPoint],
+                                temp: true,
+                                manual: true
+                            };
+                            console.log("Manual routing started (late start)");
+                        }
+                    } else {
+                        // Automatic routing mode
+                        if (snapPoint && !this.isDrawingWire) {
+                            this.isDrawingWire = true;
+                            this.wireStartRect = snapPoint.rect;
+                            this.wireStartPoint = snapPoint;
+                            
+                            this.currentWire = {
+                                startPoint: this.wireStartPoint,
+                                endPoint: { x: canvasPos.x, y: canvasPos.y, rect: null },
+                                path: null,
+                                temp: true,
+                                manual: false
+                            };
+                            console.log("Automatic routing started from connection point");
+                        }
+                    }
+                    
+                    this.draw();
+                }
+            }
+            
+            handleMouseMove(e) {
+                const rect = this.canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const canvasPos = this.screenToCanvas(x, y);
+                
+                document.getElementById('coordinates').textContent = `X: ${Math.round(canvasPos.x)}, Y: ${Math.round(canvasPos.y)}`;
+                
+                // Handle panning
+                if (this.isPanning || (this.isSpacePanning && e.buttons === 1)) {
+                    const dx = x - this.lastPanX;
+                    const dy = y - this.lastPanY;
+                    this.view.offsetX += dx;
+                    this.view.offsetY += dy;
+                    this.lastPanX = x;
+                    this.lastPanY = y;
+                    this.draw();
+                    return;
+                }
+                
+                // Handle moving a rectangle
+                if (this.isMoving && this.movingRect) {
+                    const dx = canvasPos.x - this.moveStartX;
+                    const dy = canvasPos.y - this.moveStartY;
+                    
+                    const newX = this.snapToMovingGrid(this.originalRectX + dx);
+                    const newY = this.snapToMovingGrid(this.originalRectY + dy);
+                    
+                    const testRect = {
+                        x: newX,
+                        y: newY,
+                        width: this.movingRect.width,
+                        height: this.movingRect.height
+                    };
+                    
+                    const hasCollision = this.checkRectangleCollision(testRect, this.movingRect);
+                    
+                    if (!hasCollision) {
+                        this.movingRect.x = newX;
+                        this.movingRect.y = newY;
+                        this.movingRect.updateConnectionPoints();
+                        
+                        this.updateConnectedWires(this.movingRect);
+                        
+                        this.hideCollisionWarning();
+                        this.canvas.style.cursor = 'grabbing';
+                    } else {
+                        this.showCollisionWarning();
+                    }
+                    
+                    this.draw();
+                }
+                else if (this.isDrawing && this.currentTool === 'rectangle' && this.currentRect) {
+                    const currentX = this.snapToDrawingGrid(canvasPos.x);
+                    const currentY = this.snapToDrawingGrid(canvasPos.y);
+                    
+                    this.currentRect.width = currentX - this.startX;
+                    this.currentRect.height = currentY - this.startY;
+                    
+                    const testRect = {
+                        x: this.currentRect.width < 0 ? this.startX + this.currentRect.width : this.startX,
+                        y: this.currentRect.height < 0 ? this.startY + this.currentRect.height : this.startY,
+                        width: Math.abs(this.currentRect.width),
+                        height: Math.abs(this.currentRect.height)
+                    };
+                    
+                    const hasCollision = this.checkRectangleCollision(testRect);
+                    
+                    if (hasCollision) {
+                        this.showCollisionWarning();
+                    } else {
+                        this.hideCollisionWarning();
+                    }
+                    
+                    this.draw();
+                }
+                else if (this.isDrawingWire && this.currentTool === 'wire' && this.currentWire) {
+                    this.currentWire.endPoint.x = canvasPos.x;
+                    this.currentWire.endPoint.y = canvasPos.y;
+                    
+                    if (this.manualRoutingActive) {
+                        // In manual mode, show preview from last waypoint to current mouse position
+                        if (this.manualRoutingPoints.length > 0) {
+                            const previewPath = [...this.manualRoutingPoints, { x: canvasPos.x, y: canvasPos.y }];
+                            this.currentWire.path = previewPath;
+                        }
+                    } else {
+                        // Automatic routing mode - check for connection point snapping
+                        const snapPoint = this.findSnapConnectionPoint(canvasPos.x, canvasPos.y, this.wireStartRect);
+                        
+                        if (snapPoint) {
+                            const endPoint = snapPoint;
+                            const path = this.calculateOptimalOrthogonalPath(
+                                this.wireStartPoint, 
+                                endPoint, 
+                                this.rectangles
+                            );
+                            
+                            if (path) {
+                                this.currentWire.path = path;
+                                this.currentWire.snapPoint = endPoint;
+                            } else {
+                                const startOutward = this.wireStartRect.calculateOutwardPoint(this.wireStartPoint);
+                                this.currentWire.path = this.createSimpleForwardPath(
+                                    this.wireStartPoint, startOutward, canvasPos
+                                );
+                                this.currentWire.snapPoint = null;
+                            }
+                        } else {
+                            const startOutward = this.wireStartRect.calculateOutwardPoint(this.wireStartPoint);
+                            this.currentWire.path = this.createSimpleForwardPath(
+                                this.wireStartPoint, startOutward, canvasPos
+                            );
+                            this.currentWire.snapPoint = null;
+                        }
+                    }
+                    
+                    this.draw();
+                }
+                else {
+                    this.hideCollisionWarning();
+                }
+            }
+            
+            handleMouseUp(e) {
+                const rect = this.canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const canvasPos = this.screenToCanvas(x, y);
+                
+                // Handle panning end
+                if (e.button === 1 || (e.button === 0 && this.isSpacePanning)) {
+                    this.isPanning = false;
+                    this.canvas.style.cursor = this.isSpacePanning ? 'grab' : 'crosshair';
+                    return;
+                }
+                
+                // Handle moving end
+                if (this.isMoving) {
+                    this.isMoving = false;
+                    this.hideCollisionWarning();
+                    this.canvas.style.cursor = 'crosshair';
+                    
+                    if ((this.movingRect.x !== this.originalRectX || this.movingRect.y !== this.originalRectY) && 
+                        !this.checkRectangleCollision(this.movingRect, this.movingRect)) {
+                        this.operationInProgress = false;
+                        this.saveState();
+                    } else {
+                        this.operationInProgress = false;
+                    }
+                    
+                    this.movingRect = null;
+                    return;
+                }
+                
+                if (this.isDrawing && this.currentTool === 'rectangle' && this.currentRect) {
+                    const endX = this.snapToDrawingGrid(canvasPos.x);
+                    const endY = this.snapToDrawingGrid(canvasPos.y);
+                    
+                    const width = endX - this.startX;
+                    const height = endY - this.startY;
+                    
+                    if (Math.abs(width) > 10 && Math.abs(height) > 10) {
+                        const finalRect = new Rectangle(
+                            width < 0 ? this.startX + width : this.startX,
+                            height < 0 ? this.startY + height : this.startY,
+                            Math.abs(width),
+                            Math.abs(height),
+                            this.generateId()
+                        );
+                        
+                        if (!this.checkRectangleCollision(finalRect)) {
+                            this.rectangles.push(finalRect);
+                            this.saveState();
+                            this.hideCollisionWarning();
+                        }
+                    }
+                    
+                    this.isDrawing = false;
+                    this.currentRect = null;
+                    this.draw();
+                }
+                else if (this.isDrawingWire && this.currentTool === 'wire' && this.currentWire) {
+                    // FIXED: Handle manual routing completion in mouse up (for cases where we didn't handle it in mouse down)
+                    if (this.manualRoutingActive && !this.isShiftPressed) {
+                        // If shift was released during manual routing, cancel it
+                        this.cancelManualRouting();
+                        this.isDrawingWire = false;
+                        this.currentWire = null;
+                        this.draw();
+                    }
+                    else if (!this.manualRoutingActive) {
+                        // Automatic routing completion
+                        let endPoint = null;
+                        
+                        if (this.currentWire.snapPoint) {
+                            endPoint = this.currentWire.snapPoint;
+                        } else {
+                            endPoint = this.findSnapConnectionPoint(canvasPos.x, canvasPos.y, this.wireStartRect);
+                        }
+                        
+                        if (endPoint && endPoint.rect !== this.wireStartRect) {
+                            const path = this.calculateOptimalOrthogonalPath(
+                                this.wireStartPoint, 
+                                endPoint, 
+                                this.rectangles
+                            );
+                            
+                            if (path && this.isConnectionPointAvailable(this.wireStartPoint) &&
+                                this.isConnectionPointAvailable(endPoint)) {
+                                
+                                const finalWire = {
+                                    id: this.generateId(),
+                                    startPoint: this.wireStartPoint,
+                                    endPoint: endPoint,
+                                    path: path,
+                                    color: '#2c3e50',
+                                    selected: false
+                                };
+                                
+                                this.reserveConnectionPoint(this.wireStartPoint, finalWire);
+                                this.reserveConnectionPoint(endPoint, finalWire);
+                                
+                                this.wires.push(finalWire);
+                                this.saveState();
+                            }
+                        }
+                        
+                        this.isDrawingWire = false;
+                        this.wireStartRect = null;
+                        this.currentWire = null;
+                        this.draw();
+                    }
+                }
+            }
+            
+            getRectangleAt(x, y) {
+                for (let i = this.rectangles.length - 1; i >= 0; i--) {
+                    const rect = this.rectangles[i];
+                    if (x >= rect.x && x <= rect.x + rect.width &&
+                        y >= rect.y && y <= rect.y + rect.height) {
+                        return rect;
+                    }
+                }
+                return null;
+            }
+            
+            // Grid snapping functions
+            snapToDrawingGrid(value) {
+                return Math.round(value / this.drawingGridSize) * this.drawingGridSize;
+            }
+            
+            snapToMovingGrid(value) {
+                return Math.round(value / this.movingGridSize) * this.movingGridSize;
+            }
+            
+            drawGrid() {
+                if (!this.gridEnabled) return;
+                
+                this.ctx.save();
+                this.ctx.translate(this.view.offsetX, this.view.offsetY);
+                this.ctx.scale(this.view.scale, this.view.scale);
+                
+                this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
+                this.ctx.lineWidth = 1 / this.view.scale;
+                
+                const startX = Math.floor(-this.view.offsetX / (this.view.scale * this.drawingGridSize)) * this.drawingGridSize;
+                const startY = Math.floor(-this.view.offsetY / (this.view.scale * this.drawingGridSize)) * this.drawingGridSize;
+                const endX = startX + this.canvas.width / this.view.scale + this.drawingGridSize;
+                const endY = startY + this.canvas.height / this.view.scale + this.drawingGridSize;
+                
+                for (let x = startX; x < endX; x += this.drawingGridSize) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(x, startY);
+                    this.ctx.lineTo(x, endY);
+                    this.ctx.stroke();
+                }
+                
+                for (let y = startY; y < endY; y += this.drawingGridSize) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(startX, y);
+                    this.ctx.lineTo(endX, y);
+                    this.ctx.stroke();
+                }
+                
+                this.ctx.restore();
+            }
+            
+            drawConnectionPoints() {
+                if (this.currentTool !== 'wire') return;
+                
+                this.ctx.save();
+                this.ctx.translate(this.view.offsetX, this.view.offsetY);
+                this.ctx.scale(this.view.scale, this.view.scale);
+                
+                this.rectangles.forEach(rect => {
+                    rect.connectionPoints.forEach(point => {
+                        const isAvailable = this.isConnectionPointAvailable(point);
+                        
+                        // Calculate the cycle radius for this connection point
+                        const cycleRadius = rect.calculateCycleRadius(point);
+                        
+                        // Draw the dotted-line cycle
+                        this.ctx.strokeStyle = isAvailable ? 'rgba(46, 204, 113, 0.7)' : 'rgba(231, 76, 60, 0.7)';
+                        this.ctx.lineWidth = 1.5 / this.view.scale;
+                        this.ctx.setLineDash([3, 3]);
+                        this.ctx.beginPath();
+                        this.ctx.arc(point.x, point.y, cycleRadius, 0, Math.PI * 2);
+                        this.ctx.stroke();
+                        this.ctx.setLineDash([]);
+                        
+                        // Draw the connection point itself
+                        this.ctx.fillStyle = isAvailable ? 'rgba(46, 204, 113, 0.9)' : 'rgba(231, 76, 60, 0.9)';
+                        this.ctx.beginPath();
+                        this.ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
+                        this.ctx.fill();
+                        
+                        this.ctx.strokeStyle = '#2c3e50';
+                        this.ctx.lineWidth = 1 / this.view.scale;
+                        this.ctx.beginPath();
+                        this.ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
+                        this.ctx.stroke();
+                        
+                        // Draw the outward routing line (from connection point to cycle edge)
+                        const outwardPoint = rect.calculateOutwardPoint(point);
+                        this.ctx.strokeStyle = isAvailable ? 'rgba(46, 204, 113, 0.5)' : 'rgba(231, 76, 60, 0.5)';
+                        this.ctx.lineWidth = 1.5 / this.view.scale;
+                        this.ctx.setLineDash([2, 2]);
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(point.x, point.y);
+                        this.ctx.lineTo(outwardPoint.x, outwardPoint.y);
+                        this.ctx.stroke();
+                        this.ctx.setLineDash([]);
+                    });
+                });
+                
+                this.ctx.restore();
+            }
+            
+            drawRectangles() {
+                this.rectangles.forEach(rect => {
+                    this.ctx.save();
+                    this.ctx.translate(this.view.offsetX, this.view.offsetY);
+                    this.ctx.scale(this.view.scale, this.view.scale);
+                    
+                    if (rect.selected) {
+                        this.ctx.fillStyle = '#e74c3c';
+                        this.ctx.fillRect(rect.x - 2, rect.y - 2, rect.width + 4, rect.height + 4);
+                    }
+                    
+                    this.ctx.fillStyle = 'rgba(52, 152, 219, 0.3)';
+                    this.ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+                    
+                    this.ctx.strokeStyle = rect.selected ? '#ffffff' : '#2c3e50';
+                    this.ctx.lineWidth = (rect.selected ? 3 : 2) / this.view.scale;
+                    this.ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+                    
+                    if (rect.title) {
+                        this.ctx.fillStyle = '#2c3e50';
+                        this.ctx.font = `${12 / this.view.scale}px Arial`;
+                        this.ctx.textAlign = 'center';
+                        this.ctx.textBaseline = 'middle';
+                        this.ctx.fillText(rect.title, rect.x + rect.width / 2, rect.y + rect.height / 2);
+                    }
+                    
+                    this.ctx.restore();
+                });
+            }
+            
+            drawWires() {
+                this.wires.forEach(wire => {
+                    this.ctx.save();
+                    this.ctx.translate(this.view.offsetX, this.view.offsetY);
+                    this.ctx.scale(this.view.scale, this.view.scale);
+                    
+                    this.ctx.strokeStyle = wire.selected ? '#e74c3c' : wire.color;
+                    this.ctx.lineWidth = (wire.selected ? 4 : 2) / this.view.scale;
+                    this.ctx.beginPath();
+                    
+                    if (wire.path && wire.path.length > 0) {
+                        this.ctx.moveTo(wire.path[0].x, wire.path[0].y);
+                        for (let i = 1; i < wire.path.length; i++) {
+                            this.ctx.lineTo(wire.path[i].x, wire.path[i].y);
+                        }
+                    }
+                    
+                    this.ctx.stroke();
+                    
+                    this.ctx.restore();
+                });
+            }
+            
+            drawCurrentRect() {
+                if (this.currentRect) {
+                    this.ctx.save();
+                    this.ctx.translate(this.view.offsetX, this.view.offsetY);
+                    this.ctx.scale(this.view.scale, this.view.scale);
+                    
+                    if (this.hasCollision) {
+                        this.ctx.fillStyle = 'rgba(231, 76, 60, 0.3)';
+                        this.ctx.strokeStyle = '#e74c3c';
+                    } else {
+                        this.ctx.fillStyle = 'rgba(52, 152, 219, 0.3)';
+                        this.ctx.strokeStyle = '#e74c3c';
+                    }
+                    
+                    this.ctx.fillRect(this.currentRect.x, this.currentRect.y, this.currentRect.width, this.currentRect.height);
+                    this.ctx.lineWidth = 2 / this.view.scale;
+                    this.ctx.strokeRect(this.currentRect.x, this.currentRect.y, this.currentRect.width, this.currentRect.height);
+                    
+                    this.ctx.restore();
+                }
+            }
+            
+            drawCurrentWire() {
+                if (this.currentWire) {
+                    this.ctx.save();
+                    this.ctx.translate(this.view.offsetX, this.view.offsetY);
+                    this.ctx.scale(this.view.scale, this.view.scale);
+                    
+                    if (this.manualRoutingActive) {
+                        this.ctx.strokeStyle = '#9b59b6';
+                        this.ctx.lineWidth = 3 / this.view.scale;
+                        this.ctx.setLineDash([5 / this.view.scale, 5 / this.view.scale]);
+                    } else {
+                        this.ctx.strokeStyle = '#e74c3c';
+                        this.ctx.lineWidth = 2 / this.view.scale;
+                        this.ctx.setLineDash([5 / this.view.scale, 5 / this.view.scale]);
+                    }
+                    
+                    this.ctx.beginPath();
+                    
+                    if (this.currentWire.path) {
+                        this.ctx.moveTo(this.currentWire.path[0].x, this.currentWire.path[0].y);
+                        for (let i = 1; i < this.currentWire.path.length; i++) {
+                            this.ctx.lineTo(this.currentWire.path[i].x, this.currentWire.path[i].y);
+                        }
+                    }
+                    
+                    this.ctx.stroke();
+                    this.ctx.setLineDash([]);
+                    
+                    // Draw waypoint markers in manual mode
+                    if (this.manualRoutingActive && this.manualRoutingPoints.length > 1) {
+                        for (let i = 1; i < this.manualRoutingPoints.length; i++) {
+                            const point = this.manualRoutingPoints[i];
+                            this.ctx.fillStyle = '#9b59b6';
+                            this.ctx.beginPath();
+                            this.ctx.arc(point.x, point.y, 6, 0, Math.PI * 2);
+                            this.ctx.fill();
+                            
+                            this.ctx.strokeStyle = '#ffffff';
+                            this.ctx.lineWidth = 1 / this.view.scale;
+                            this.ctx.beginPath();
+                            this.ctx.arc(point.x, point.y, 6, 0, Math.PI * 2);
+                            this.ctx.stroke();
+                        }
+                    }
+                    
+                    this.ctx.restore();
+                }
+            }
+            
+            draw() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                this.drawGrid();
+                this.drawWires();
+                this.drawRectangles();
+                this.drawConnectionPoints();
+                this.drawCurrentRect();
+                this.drawCurrentWire();
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            new DrawingApp();
+        });
+    </script>
+</body>
+</html>
