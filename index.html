@@ -1,3 +1,4 @@
+<!---
 <!DOCTYPE html>
 <html>
 <body>
@@ -11,5 +12,36 @@
   <div><a href="public/webapp_drawing_rect_and_wire">public/webapp_drawing_rect_and_wire</a></div>
   <div><a href="public/webapp_drawing_rect_and_wire/webapp_drawing_rect_and_wire.html">public/webapp_drawing_rect_and_wire/webapp_drawing_rect_and_wire.html</a></div>
 </p>
+</body>
+</html>
+-->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Redirecting...</title>
+    <script>
+        // Replace this with your Gist RAW URL
+        const CONFIG_URL = "https://gist.githubusercontent.com/xnzuuuu1/86feee2ed4f329adbdc09ccc3dc7dbf1/raw/cloudflared_quick_tunnel_url.json";
+
+        async function redirect() {
+            try {
+                // Fetch the JSON (cache-busting with timestamp)
+                const response = await fetch(CONFIG_URL + '?t=' + new Date().getTime());
+                const data = await response.json();
+                
+                if (data.url) {
+                    // Perform the redirect
+                    window.location.href = data.url;
+                }
+            } catch (e) {
+                console.error("Failed to load tunnel URL", e);
+                document.body.innerHTML = "Error loading redirection endpoint.";
+            }
+        }
+        redirect();
+    </script>
+</head>
+<body>
+    <p>Loading secure tunnel...</p>
 </body>
 </html>
