@@ -1375,7 +1375,7 @@
         },
         "filePath": "index.html",
         "fileContent": "={{ $json.modifiedHtmlString }}",
-        "commitMessage": "updated loogin url"
+        "commitMessage": "updated login url"
       },
       "type": "n8n-nodes-base.github",
       "typeVersion": 1.1,
@@ -2212,7 +2212,7 @@
     "callerPolicy": "workflowsFromSameOwner",
     "availableInMCP": false
   },
-  "versionId": "83100023-02f5-43de-bf9d-705356611d2e",
+  "versionId": "b817b4f7-25bc-4289-9df8-16199a5d0b2b",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "54e3a36a0aeeba46bc94e88619a4d15f93044d49e5a1f1b260a646f4180a05e9"
