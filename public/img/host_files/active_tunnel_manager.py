@@ -1,127 +1,117 @@
 #!/usr/bin/env python3
-"""
-Sidecar Tunnel Manager
-1. Reads /shared_logs/cloudflared.log (from the Tunnel container)
-2. Extracts the current trycloudflare.com URL
-3. Updates docker-compose.yml if the URL has changed
-"""
-
 import time
 import os
 import json
 import re
+import sys
+import shutil
+import tempfile
+import subprocess
 import urllib.request
 from datetime import datetime
+from pathlib import Path
 
 # --- CONFIGURATION ---
 TUNNEL_LOG_PATH = "/shared_logs/cloudflared.log"
 DOCKER_COMPOSE_PATH = "/home/node/host_files/docker-compose.yml"
 SCRIPT_LOG_FILE = "/home/node/sidecar-monitor.log"
+TRIGGER_FILE_PATH = "/home/node/host_files/n8n_restart.txt"
+TRIGGER2_FILE_PATH = "/home/node/host_files/tunnel_restart.txt"
 
-def log_message(message):
+def log_stderr(message):
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    entry = f"[{timestamp}] {message}"
-    print(entry, flush=True)
+    print(f"[{timestamp}] {message}", file=sys.stderr, flush=True)
+
+def get_latest_url():
+    # Use tail to read only the last 100 lines (Efficient)
+    if not os.path.exists(TUNNEL_LOG_PATH): return None
     try:
-        with open(SCRIPT_LOG_FILE, 'a') as f:
-            f.write(entry + '\n')
+        logs = subprocess.check_output(['tail', '-n', '2000', TUNNEL_LOG_PATH], stderr=subprocess.DEVNULL).decode('utf-8', errors='ignore')
+        matches = re.findall(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', logs)
+        log_stderr(f"matches: {matches}")
+        if matches: return matches[-1]
     except: pass
-
-def get_tunnel_url():
-    # Try 5 times to find a valid URL
-    for attempt in range(5):
-        if not os.path.exists(TUNNEL_LOG_PATH):
-            time.sleep(2)
-            continue
-
-        try:
-            with open(TUNNEL_LOG_PATH, 'r') as f:
-                content = f.read()
-            
-            # Regex for URL
-            url_pattern = r'https://[a-zA-Z0-9_-]+\.trycloudflare\.com'
-            matches = re.findall(url_pattern, content)
-            
-            if matches:
-                return matches[-1]
-        except Exception as e:
-            pass
-        
-        # If we didn't find it, wait 2 seconds and look again
-        time.sleep(2)
-
-    log_message("Error: Could not find URL in logs after 5 attempts.")
     return None
 
 def check_url_health(url):
-    """Verifies the URL is actually active"""
     try:
+        # 3s timeout is enough for a local check
         req = urllib.request.Request(url, method='HEAD')
-        with urllib.request.urlopen(req, timeout=10) as response:
-            return response.getcode() in [200, 302, 404, 503]
-    except:
-        return False
+        with urllib.request.urlopen(req, timeout=3) as response:
+            return response.getcode() < 400
+    except: return False
 
-def update_docker_compose(new_url):
-    """Updates the WEBHOOK_URL in the YAML file"""
-    if not os.path.exists(DOCKER_COMPOSE_PATH):
-        log_message("Error: docker-compose.yml not found")
-        return False
-
+def atomic_update_compose(new_url):
+    if not os.path.exists(DOCKER_COMPOSE_PATH): return False
     if not new_url.endswith('/'): new_url += '/'
 
-    with open(DOCKER_COMPOSE_PATH, 'r') as f:
-        content = f.read()
-
-    # Regex to find 'WEBHOOK_URL=...'
-    pattern = r'(WEBHOOK_URL=)(.*)'
-    
-    match = re.search(pattern, content)
-    if match:
-        current_in_file = match.group(2)
-        if current_in_file.strip().rstrip('/') == new_url.strip().rstrip('/'):
-            # log_message("URL in docker-compose.yml is already correct. No update needed.")
-            return False 
+    try:
+        with open(DOCKER_COMPOSE_PATH, 'r') as f: content = f.read()
         
-        # Apply Change
-        log_message(f"Updating WEBHOOK_URL to {new_url}")
-        new_content = re.sub(pattern, f'\\1{new_url}', content)
-        with open(DOCKER_COMPOSE_PATH, 'w') as f:
-            f.write(new_content)
-        return True
-    
+        pattern = r'(WEBHOOK_URL=)(.*)'
+        match = re.search(pattern, content)
+        
+        if match:
+            current_url = match.group(2).strip().strip('"').strip("'").rstrip('/')
+            if current_url == new_url.strip().rstrip('/'):
+                return False # No change, do NOT touch files
+
+            # Update Content
+            new_content = re.sub(pattern, f'\\1{new_url}', content)
+            
+            # Atomic Write
+            with tempfile.NamedTemporaryFile('w', dir=os.path.dirname(DOCKER_COMPOSE_PATH), delete=False) as tmp:
+                tmp.write(new_content)
+                temp_name = tmp.name
+            shutil.move(temp_name, DOCKER_COMPOSE_PATH)
+            
+            # TOUCH TRIGGER FILE (This signals 'entr' to restart n8n)
+            try:
+                #Path(TRIGGER_FILE_PATH).touch()
+                #os.chmod(TRIGGER_FILE_PATH, 0o644)
+                timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                with tempfile.NamedTemporaryFile('w', dir=os.path.dirname(TRIGGER_FILE_PATH), delete=False) as tmp:
+                    tmp.write(timestamp)
+                    temp_name = tmp.name
+                shutil.move(temp_name, TRIGGER_FILE_PATH)
+            except: pass
+            
+            return True
+    except Exception as e:
+        log_stderr(f"Update failed: {e}")
+        return False
     return False
 
 def main():
-    log_message("=== Sidecar Monitor Started ===")
+    result = {"action": "error", "url": None}
     
-    # 1. Get URL from shared logs
-    url = get_tunnel_url()
+    url = get_latest_url()
     
     if not url:
-        log_message("No Tunnel URL found yet.")
-        print(json.dumps({"success": False, "error": "No URL found"}))
-        return
-
-    # 2. Check if it works
-    if check_url_health(url):
-        # 3. Update File (if needed)
-        changed = update_docker_compose(url)
-        
-        if changed:
-            log_message("File updated! Mac Watcher should trigger restart soon.")
-            print(json.dumps({"success": True, "action": "update", "url": url}))
-        else:
-            print(json.dumps({"success": True, "action": "noChange", "url": url}))
-            
+        result["error"] = "No URL found"
+    # Note: We skip check_url_health here because if the tunnel is new, 
+    # it might take a second to be reachable from outside. 
+    # We trust the log file if it's new.
+    elif not check_url_health(url):
+        # TOUCH TRIGGER2 FILE (This signals 'entr' to restart tunnel by force)
+        try:
+            #Path(TRIGGER2_FILE_PATH).touch()
+            #os.chmod(TRIGGER2_FILE_PATH, 0o644)
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            with tempfile.NamedTemporaryFile('w', dir=os.path.dirname(TRIGGER2_FILE_PATH), delete=False) as tmp:
+                tmp.write(timestamp)
+                temp_name = tmp.name
+            shutil.move(temp_name, TRIGGER2_FILE_PATH)
+            result["error"] = "Unhealthy URL found"
+        except: pass
+    elif atomic_update_compose(url):
+        result["action"] = "update"
+        result["url"] = url
     else:
-        # If URL is found in logs but unreachable, we assume the tunnel container 
-        # is dead/restarting or Mac just woke up.
-        # We DO NOT start a process. We report failure and wait for Docker to auto-restart the tunnel.
-        log_message(f"URL found ({url}) but it is not reachable.")
-        print(json.dumps({"success": False, "error": "URL Unreachable - Waiting for Docker/Network"}))
-    
-    log_message("=== Sidecar Monitor Ended ===")
+        result["action"] = "noChange"
+        result["url"] = url
+
+    print(json.dumps(result))
 
 if __name__ == "__main__":
     main()
