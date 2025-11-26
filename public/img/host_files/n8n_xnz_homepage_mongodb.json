@@ -1,0 +1,2222 @@
+{
+  "name": "n8n_xnz_homepage_mongodb",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "mode": "custom",
+              "cronExpression": "*/60 */5 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "2c1942ad-4f56-4d24-a561-561398a4d492",
+      "name": "Tunnel Monitor",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        -4960,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "command": "python3 /home/node/.n8n/active_tunnel_manager.py check"
+      },
+      "id": "4c3eaa26-e17b-4d56-8f89-4f7b3b3bcff2",
+      "name": "Check Tunnel Status",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -4608,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check session and add user context to data flow\nconst webhookData = $input.first().json;\nconst cookies = webhookData.headers?.cookie || '';\n\n// Simple session parsing (in production, use proper session management)\nlet session = {};\nif (cookies) {\n  const sessionCookie = cookies.split(';').find(c => c.trim().startsWith('session='));\n  if (sessionCookie) {\n    try {\n      const sessionData = decodeURIComponent(sessionCookie.split('=')[1]);\n      session = JSON.parse(sessionData);\n    } catch (e) {\n      session = {};\n    }\n  }\n}\n\n// Add session data to the flow\nconst output = {\n  ...webhookData,\n  session: session,\n  isAuthenticated: !!session.userId\n};\n\nreturn [{ json: output }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4608,
+        -1168
+      ],
+      "id": "8737363a-ab3f-46e9-b13c-744ac53b08df",
+      "name": "Session Middleware"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process input data\nconst webhookUrl = $('Non-root Webhook').first().json.webhookUrl;\nconst params = JSON.stringify($('Non-root Webhook').first().json.params) === '{}' ?\n  $('Non-root Webhook').first().json.params :\n  $('Non-root Webhook').first().json.params.select;\nconst webhookUrlRootHttp = JSON.stringify($('Non-root Webhook').first().json.params) === '{}' ?\n  $('Non-root Webhook').first().json.webhookUrl :\n  $('Non-root Webhook').first().json.webhookUrl.split('/').slice(0, -1).join('/');\nconst webhookUrlRoot = webhookUrlRootHttp;\n\n// Check if user is already logged in\nconst session = $input.first().json.session || {};\n\n// Get user data from Verify Login Password node\nconst userData = $input.first().json;\n\n// Check for authentication error\nconst isError = userData && userData.error;\n\n// Create session cookie after successful login\nconst user = !isError ? userData : {};\n\n// Generate login response based on success or failure\nconst content = isError ?\n  `<div>\n    <p>\n    <div>${userData.error}<\\div><div><b>Please try again</b>!</div>\n    <div>You have not yet logged in.</div>\n    </p>\n    <a href=\"${webhookUrlRoot}/login\">Login</a>\n  </div>\n  `:\n  `<div>\n    <p>\n    <div>Welcome back, <b>${user.name || user.email}</b>.</div>\n    <div>Successfully logged in.</div>\n    </p>\n    <a href=\"${webhookUrlRoot}/photoblog\">Photo Blog</a>\n    <!-- <a href=\"${webhookUrlRoot}/logout\">Logout</a> -->\n  </div>\n  `;\n\n// Create session data only on successful login\nconst sessionData = !isError && user && (user._id || user.email) ?\n  {\n    userId: user._id || user.id,\n    email: user.email,\n    name: user.name || user.email,\n    loginTime: new Date().toISOString()\n  } :\n  {};\n\n// Create session cookie\n// ✅ FIXED: Handle both success and failure cases\nlet sessionCookie = '';\nif (!isError && user && (user._id || user.email)) {\n  sessionCookie = `session=${encodeURIComponent(JSON.stringify(sessionData))}; Path=/; Secure; HttpOnly; SameSite=None`;\n} else {\n  // For failed login, clear any existing session\n  sessionCookie = 'session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT';\n}\n\nreturn [{ \n  json: { \n    content,\n    sessionCookie\n  } \n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2896,
+        -1008
+      ],
+      "id": "615f4fd1-43ac-45fa-9e53-9bab987452eb",
+      "name": "Create Login Session"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process input data\nconst webhookUrl = $input.first().json.webhookUrl;\nconst params = JSON.stringify($input.first().json.params) === '{}' ?\n  $input.first().json.params :\n  $input.first().json.params.select;\nconst webhookUrlRootHttp = JSON.stringify($input.first().json.params) === '{}' ? \n  $input.first().json.webhookUrl :\n  $input.first().json.webhookUrl.split('/').slice(0, -1).join('/');\nconst webhookUrlRoot = webhookUrlRootHttp;\n\nconst content = `\n<div class=\"status-message\">\n  <h2>Logout Successful</h2>\n  <p>You have been successfully logged out.</p>\n  <a href=\"${webhookUrlRoot}/login\">Login</a>\n</div>\n`;\n\n// Clear session cookie\nconst clearSessionCookie = 'session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT';\n\nreturn [{ json: { params, webhookUrl, webhookUrlRoot, content, sessionCookie: clearSessionCookie } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3120,
+        -1168
+      ],
+      "id": "a83d84a7-09b5-4523-b5f1-4d1d87879834",
+      "name": "Handle Logout"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process input data\nconst webhookUrl = $input.first().json.webhookUrl;\nconst params = JSON.stringify($input.first().json.params) === '{}' ?\n  $input.first().json.params :\n  $input.first().json.params.select;\nconst webhookUrlRootHttp = JSON.stringify($input.first().json.params) === '{}' ? \n  $input.first().json.webhookUrl :\n  $input.first().json.webhookUrl.split('/').slice(0, -1).join('/');\nconst webhookUrlRoot = webhookUrlRootHttp;\n\n// Check if user is already logged in\nconst session = $input.first().json.session || {};\n\nlet content;\n\nif (session.userId) {\n  content = `\n  <div class=\"status-message\">\n    <h2><span style=\"font-weight: normal;\">Welcome again, </span>${session.name}<span style=\"font-weight: normal;\">.</span></h2>\n    <p>You are already logged in.</p>\n    <a href=\"${webhookUrlRoot}/photoblog\">Photo Blog</a>\n    <!-- <a href=\"${webhookUrlRoot}/logout\">Logout</a> -->\n  </div>\n  `;\n} else {\n  content = `\n  <form action=\"${webhookUrlRoot}/login\" method=\"POST\">\n      <h2>Login</h2>\n      <div>\n          <label for=\"email\">Email:</label>\n          <input type=\"text\" id=\"email\" name=\"email\" required>\n      </div>\n      <div>\n          <label for=\"password\">Password:</label>\n          <input type=\"password\" id=\"password\" name=\"password\" required>\n      </div>\n      <button type=\"submit\">Submit</button>\n  </form>\n  `;\n}\n\nreturn [{ json: { params, webhookUrl, webhookUrlRoot, content } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3136,
+        -2272
+      ],
+      "id": "bdf118f2-ed62-4321-9b96-af80fbe9332f",
+      "name": "Get Enhanced Login Page"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process input data\nconst webhookUrl = $('Non-root Webhook').first().json.webhookUrl;\nconst params = JSON.stringify($('Non-root Webhook').first().json.params) === '{}' ?\n  $('Non-root Webhook').first().json.params :\n  $('Non-root Webhook').first().json.params.select;\nconst webhookUrlRootHttp = JSON.stringify($('Non-root Webhook').first().json.params) === '{}' ?\n  $('Non-root Webhook').first().json.webhookUrl :\n  $('Non-root Webhook').first().json.webhookUrl.split('/').slice(0, -1).join('/');\nconst webhookUrlRoot = webhookUrlRootHttp;\n\n// Check if user is already logged in\n//const session = $input.first().json.session || {};\n// Check session for access control\nconst session = $('Session Middleware').first().json.session || {};\nconst isAuthenticated = !!session.userId;\n\n// Enhanced photo blog page with session check and comments\nfunction sanitize(str) {\n    if (typeof str !== 'string') return '';\n    return str\n        .replace(/&/g, '&amp;')\n        .replace(/</g, '&lt;')\n        .replace(/>/g, '&gt;')\n        .replace(/\"/g, '&quot;')\n        .replace(/'/g, '&#x27;');\n}\n\nconst inputData = $input.all();\nconst posts = inputData.map(item => item.json);\n\n// Sanitize post data\nlet action = '';\nlet sanitizedPosts = {};\nlet sanitizedPostsStr = '';\n\nlet htmlStart = '', htmlMiddle = '', htmlEnd = '';\n\nif (isAuthenticated) {\n  // Full photo blog page for authenticated users\n  action = webhookUrlRoot + '/photoblog';\n  sanitizedPosts = posts.filter(post => post && typeof post === 'object').map(post => ({\n    _id: post?._id || '',\n    author: sanitize(post?.author || ''),\n    title: sanitize(post?.title || ''),\n    description: sanitize(post?.description || ''),\n    createdAt: post?.createdAt || new Date().toISOString(),\n    downloadUrls: Array.isArray(post?.downloadUrls) ? post.downloadUrls.map(url => sanitize(url || '')) : [],\n    comments: Array.isArray(post?.comments) ? post.comments\n      .filter(comment => comment && typeof comment === 'object')\n      .map(comment => ({\n        author: sanitize(comment?.author || 'Anonymous'),\n        content: sanitize(comment?.content || '').replace(/</g, '&lt;').replace(/>/g, '&gt;'),\n        createdAt: comment?.createdAt || new Date().toISOString()\n      })) : []\n  }));\n  sanitizedPostsStr = JSON.stringify(sanitizedPosts) === '{}' ? '' : JSON.stringify(sanitizedPosts);\n  \n  htmlStart = `<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>Photo Blog | Share Your Moments</title>\n    <link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css\">\n    <style>\n        * {\n            margin: 0;\n            padding: 0;\n            box-sizing: border-box;\n            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;\n        }\n\n  body {\n           background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);\n            color: #333;\n            line-height: 1.6;\n          padding: 20px;\n            min-height: 100vh;\n        }\n\n        .container {\n            max-width: 1200px;\n            margin: 0 auto;\n        }\n\n        header {\n            text-align: center;\n            padding: 30px 0;\n            margin-bottom: 30px;\n        }\n\n        header h1 {\n  font-size: 2.8rem;\n            color: #2c3e50;\n            margin-bottom: 10px;\n        }\n\n        header p {\n            font-size: 1.2rem;\n            color: #7f8c8d;\n            max-width: 600px;\n            margin: 0 auto;\n        }\n\n/* Merged styles for the container */\n.user-info {\n    display: flex;\n    justify-content: space-between; /* <-- This is the new line you need */\n    align-items: center;            /* <-- Optional: Vertically center text/link */\n    \n    /* Original styles: */\n    background: white;\n    border-radius: 15px;\n    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);\n    padding: 20px;\n    margin-bottom: 20px;\n    /* text-align: left; <-- This property isn't necessary with flexbox alignment */\n    width: 100%; /* Optional: Ensure it spans the full width of its parent */\n}\n\n/* Original styles for the span */\n.user-info span {\n    /* margin-right: 15px; <-- This margin is no longer needed because 'space-between' handles separation */\n    font-weight: bold;\n    /* text-align: right; <-- This property is for block elements within the span, not needed here */\n}\n\n\n        .upload-section {\n            background: white;\n            border-radius: 15px;\n            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);\n            padding: 30px;\n            margin-bottom: 40px;\n        }\n\n        .upload-section h2 {\n            color: #3498db;\n margin-bottom: 20px;\n            text-align: center;\n        }\n\n        .upload-form {\n            display: flex;\n            flex-direction: column;\n            gap: 20px;\n        }\n\n        .form-group {\n            display: flex;\n            flex-direction: column;\n      }\n\n        .form-group label {\n            margin-bottom: 8px;\n            font-weight: 600;\n            color: #2c3e50;\n        }\n\n        .form-group input, \n        .form-group textarea {\n            padding: 15px;\n            border: 2px solid #e0e0e0;\n            border-radius: 10px;\n font-size: 1rem;\n            transition: border-color 0.3s;\n        }\n\n        .form-group input:focus, \n        .form-group textarea:focus {\n            border-color: #3498db;\n            outline: none;\n        }\n\n        .form-group textarea {\n            min-height: 120px;\n            resize: vertical;\n        }\n\n        .image-upload {\n            border: 2px dashed #3498db;\n            border-radius: 10px;\n            padding: 30px;\n            text-align: center;\n            transition: all 0.3s;\n            background-color: #f8f9fa;\n            position: relative;\n        min-height: 200px;\n            display: flex;\n            flex-direction: column;\n            justify-content: center;\n            align-items: center;\n            user-select: none;\n            -webkit-user-select: none;\n            -moz-user-select: none;\n            -ms-user-select: none;\n  cursor: pointer;\n     }\n\n        .image-upload:hover {\n            background-color: #e3f2fd;\n            border-color: #2980b9;\n        }\n\n        .image-upload i {\n            font-size: 3rem;\n            color: #3498db;\n            margin-bottom: 15px;\n        }\n\n        .image-upload p {\n            color: #7f8c8d;\n            margin-bottom: 15px;\n        }\n\n        .image-upload .file-info {\n            margin-top: 15px;\n            color: #2c3e50;\n            font-weight: 500;\n            max-width: 100%;\n            overflow: hidden;\n            text-overflow: ellipsis;\n        }\n\n        .btn {\n            background: linear-gradient(to right, #3498db, #2c3e50);\n            color: white;\n            border: none;\n            padding: 15px 25px;\n            font-size: 1.1rem;\n            border-radius: 50px;\n            cursor: pointer;\n            transition: all 0.3s;\n            font-weight: 600;\n            box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);\n        }\n\n        .btn:hover {\n      transform: translateY(-3px);\n            box-shadow: 0 6px 20px rgba(52, 152, 219, 0.4);\n        }\n\n        .btn:active {\n            transform: translateY(0);\n        }\n\n        .posts-container {\n            display: grid;\n            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));\n            gap: 30px;\n            margin-top: 30px;\n        }\n\n        .post-card {\n            background: white;\n            border-radius: 15px;\n            overflow: hidden;\n            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);\n            transition: transform 0.3s, box-shadow 0.3s;\n            cursor: pointer;\n        }\n\n        .post-card:hover {\n            transform: translateY(-5px);\n            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);\n        }\n\n        .post-content {\n            padding: 20px;\n        }\n\n        .post-title {\n            font-size: 1.4rem;\n            color: #2c3e50;\n            margin-bottom: 10px;\n        }\n\n        .post-description {\n            color: #7f8c8d;\n  margin-bottom: 15px;\n        }\n\n        .post-meta {\n            display: flex;\n            justify-content: space-between;\n            color: #95a5a6;\n            font-size: 0.9rem;\n            margin-bottom: 15px;\n        }\n\n        /* Clickable area indicator */\n        .post-header-clickable {\n            cursor: pointer;\n            padding: 15px 20px 10px 20px;\n            margin: -20px -20px 15px -20px;\n            border-radius: 15px 15px 0 0;\n            transition: background-color 0.2s;\n        }\n\n        .post-header-clickable:hover {\n            background-color: #f8f9fa;\n        }\n\n        /* Carousel Styles - Consistent sizing with single images */\n        .carousel-container {\n            position: relative;\n            width: 100%;\n            margin: 15px 0;\n            border-radius: 8px;\n            overflow: hidden;\n            box-shadow: 0 2px 10px rgba(0,0,0,0.1);\n        }\n\n        .carousel {\n            display: flex;\n            transition: transform 0.3s ease-in-out;\n        }\n\n        .carousel-item {\n            min-width: 100%;\n            display: flex;\n            justify-content: center;\n       align-items: center;\n        }\n\n        .carousel-item img {\n            width: 100%;\n            min-height: 200px;\n            max-height: 400px;\n            height: auto;\n            object-fit: cover;\n            border-radius: 8px;\n            cursor: pointer;\n        }\n\n        .carousel-nav {\n            position: absolute;\n            top: 50%;\n            transform: translateY(-50%);\n            background: rgba(0, 0, 0, 0.5);\n            color: white;\n            border: none;\n            padding: 15px 20px;\n            cursor: pointer;\n            border-radius: 0;\n font-size: 24px;\n            transition: background 0.3s;\n            z-index: 10;\n            /* Arrows on top of images */\n            opacity: 0.7;\n        }\n\n        .carousel-nav:hover {\n            background: rgba(0, 0, 0, 0.8);\n            opacity: 1;\n        }\n\n        .carousel-nav.prev {\n            left: 10px;\n            border-radius: 0 5px 5px 0;\n        }\n\n        .carousel-nav.next {\n            right: 10px;\n            border-radius: 5px 0 0 5px;\n        }\n\n        .carousel-indicators {\n            display: flex;\n            justify-content: center;\n            padding: 15px 0 10px 0;\n            gap: 8px;\n        }\n\n        .indicator {\n            width: 12px;\n            height: 12px;\n            border-radius: 50%;\n            background: #ccc;\n            cursor: pointer;\n            transition: background 0.3s;\n        }\n\n        .indicator.active {\n            background: #3498db;\n        }\n\n        .image-grid {\n            display: grid;\n            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));\n            gap: 8px;\n            margin: 15px 0;\n        }\n\n        .image-grid img {\n width: 100%;\n            max-height: 300px;\n            object-fit: cover;\n            border-radius: 4px;\n            cursor: pointer;\n    transition: transform 0.2s;\n        }\n\n        /* Special styling for single images to make them bigger */\n        .image-grid.single-image {\n display: block;\n        }\n\n        .image-grid.single-image img {\n            width: 100%;\n            max-height: none;\n            height: auto;\n            min-height: 200px;\n            object-fit: cover;\n        }\n\n        .image-grid img:hover {\n            transform: scale(1.05);\n        }\n\n        .clickable-image {\n            cursor: pointer;\n        }\n\n        .upload-history-section {\n            background: white;\n            border-radius: 15px;\n            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);\n            padding: 30px;\n            margin-bottom: 40px;\n        }\n\n        .upload-history-section h2 {\n            color: #3498db;\n            margin-bottom: 20px;\n            text-align: center;\n        }\n\n        footer {\n            text-align: center;\n            padding: 30px 0;\n            margin-top: 40px;\n          color: #7f8c8d;\n            border-top: 1px solid #eee;\n        }\n\n        /* Post Detail Modal Styles */\n        .modal {\n            display: none;\n            position: fixed;\n            z-index: 1000;\n            left: 0;\n            top: 0;\n            width: 100%;\n            height: 100%;\n            background-color: rgba(0,0,0,0.8);\n            overflow: auto;\n        }\n\n        .modal-content {\n            background-color: white;\n            margin: 2% auto;\n            padding: 0;\n            border-radius: 15px;\n            width: 90%;\n            max-width: 800px;\n   box-shadow: 0 10px 30px rgba(0,0,0,0.3);\n            position: relative;\n        }\n\n        .modal-header {\n            padding: 20px 30px 10px 30px;\n            background-color: #f8f9fa;\n            border-radius: 15px 15px 0 0;\n            border-bottom: 1px solid #eee;\n        }\n\n    .modal-title {\n            font-size: 2rem;\n            color: #2c3e50;\n            margin-bottom: 10px;\n        }\n\n        .modal-meta {\n            color: #95a5a6;\n            font-size: 0.9rem;\n            margin-bottom: 15px;\n        }\n\n        .modal-description {\n            color: #7f8c8d;\n            font-size: 1.1rem;\n            line-height: 1.6;\n            margin-bottom: 20px;\n        }\n\n        .modal-body {\n            padding: 20px 30px;\n        }\n\n        .modal-images {\n            margin: 20px 0;\n        }\n\n        .modal-close {\n            color: #aaa;\n     float: right;\n            font-size: 28px;\n            font-weight: bold;\n            cursor: pointer;\n            position: absolute;\n         right: 20px;\n            top: 15px;\n            z-index: 1001;\n        }\n\n        .modal-close:hover {\n            color: #000;\n        }\n\n     .modal-carousel-container {\n            position: relative;\n            width: 100%;\n            margin: 15px 0;\n            border-radius: 8px;\n   overflow: hidden;\n            box-shadow: 0 2px 10px rgba(0,0,0,0.1);\n        }\n\n        .modal-carousel {\n            display: flex;\n       transition: transform 0.3s ease-in-out;\n        }\n\n        .modal-carousel-item {\n            min-width: 100%;\n            display: flex;\n       justify-content: center;\n            align-items: center;\n        }\n\n        .modal-carousel-item img {\n            width: 100%;\n            max-height: 500px;\n            height: auto;\n            object-fit: contain;\n            cursor: pointer;\n            border-radius: 8px;\n        }\n\n        .modal-carousel-nav {\n            position: absolute;\n            top: 50%;\n            transform: translateY(-50%);\n            background: rgba(0, 0, 0, 0.5);\n            color: white;\n            border: none;\n            padding: 15px 20px;\n            cursor: pointer;\n      border-radius: 0;\n            font-size: 24px;\n            transition: background 0.3s;\n            z-index: 10;\n            opacity: 0.7;\n      }\n\n        .modal-carousel-nav:hover {\n            background: rgba(0, 0, 0, 0.8);\n            opacity: 1;\n        }\n\n        .modal-carousel-nav.prev {\n            left: 10px;\n            border-radius: 0 5px 5px 0;\n        }\n\n        .modal-carousel-nav.next {\n            right: 10px;\n            border-radius: 5px 0 0 5px;\n        }\n\n        .modal-indicators {\n            display: flex;\n            justify-content: center;\n            padding: 15px 0 10px 0;\n            gap: 8px;\n        }\n\n        .modal-indicator {\n            width: 12px;\n            height: 12px;\n            border-radius: 50%;\n            background: #ccc;\n            cursor: pointer;\n            transition: background 0.3s;\n        }\n\n        .modal-indicator.active {\n            background: #3498db;\n        }\n\n        .modal-grid {\n            display: grid;\n            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));\n            gap: 15px;\n            margin: 20px 0;\n        }\n\n        .modal-grid img {\n            width: 100%;\n            height: 150px;\n            object-fit: cover;\n            border-radius: 8px;\n            cursor: pointer;\n    transition: transform 0.2s;\n        }\n\n        .modal-grid img:hover {\n            transform: scale(1.05);\n        }\n\n        /* Comments Styles */\n        .comments-section {\n            margin-top: 30px;\n            padding-top: 20px;\n            border-top: 1px solid #eee;\n        }\n\n        .comments-section h3 {\n            color: #2c3e50;\n            margin-bottom: 15px;\n        }\n\n        .comment {\n            background: #f8f9fa;\n            border-radius: 10px;\n            padding: 15px;\n            margin-bottom: 15px;\n        }\n\n        .comment-author {\n            font-weight: bold;\n            color: #3498db;\n            margin-bottom: 5px;\n        }\n\n        .comment-date {\n            font-size: 0.8rem;\n            color: #95a5a6;\n            margin-bottom: 10px;\n        }\n\n        .comment-content {\n            color: #333;\n      line-height: 1.5;\n        }\n\n        .comment-form {\n            margin-top: 20px;\n            background: #f8f9fa;\n            padding: 20px;\n            border-radius: 10px;\n        }\n\n        .comment-form h4 {\n            margin-bottom: 15px;\n            color: #2c3e50;\n        }\n\n        .comment-form textarea {\n            width: 100%;\n            padding: 12px;\n            border: 1px solid #ddd;\n            border-radius: 8px;\n            resize: vertical;\n            min-height: 100px;\n            margin-bottom: 15px;\n        }\n\n        .comment-form button {\n            background: #3498db;\n            color: white;\n            border: none;\n            padding: 10px 20px;\n            border-radius: 5px;\n            cursor: pointer;\n        }\n\n        .comment-form button:hover {\n            background: #2980b9;\n        }\n\n       @media (max-width: 768px) {\n            .posts-container {\n                grid-template-columns: 1fr;\n            }\n            \n            header h1 {\n                font-size: 2.2rem;\n            }\n            \n            .upload-section {\n                padding: 20px;\n            }\n       \n            .carousel-item img {\n                min-height: 150px;\n                max-height: 300px;\n            }\n            \n            .image-grid.single-image img {\n                min-height: 150px;\n            }\n            \n            .carousel-nav {\n                padding: 10px 15px;\n                font-size: 18px;\n            }\n            \n            .modal-content {\n                width: 95%;\n                margin: 5% auto;\n            }\n            \n            .modal-title {\n                font-size: 1.5rem;\n            }\n            \n            .modal-carousel-item img {\n                max-height: 300px;\n            }\n        }\n    </style>\n</head>\n<body>\n    <div class=\"container\">\n    <header>\n                <h1><i class=\"fas fa-camera-retro\"></i> Photo Blog</h1>\n                <p>Share your moments with the world. Upload your photos and connect with others.</p>\n        </header>\n\n        <div class=\"user-info\">\n            <span>${session.name}</span>\n            <a href=\"${webhookUrlRoot}/logout\">Logout</a>\n        </div>\n\n        <section class=\"upload-section\">\n            <h2>Share Your Moment</h2>\n     <form class=\"upload-form\" id=\"uploadForm\" action=\"`;\n\n  htmlMiddle = `\" method=\"POST\" enctype=\"multipart/form-data\">\n                <div class=\"form-group\">\n                    <label for=\"title\">Post Title</label>\n                    <input type=\"text\" id=\"title\" name=\"title\" placeholder=\"What's this photo about?\" required>\n                </div>\n                \n                <div class=\"form-group\">\n   <label for=\"description\">Description</label>\n                    <textarea id=\"description\" name=\"description\" placeholder=\"Tell us more about this moment...\"></textarea>\n                </div>\n                \n                <div class=\"form-group\">\n                    <label>Upload Images</label>\n                    <div class=\"image-upload\" id=\"imageUpload\">\n                        <i class=\"fas fa-cloud-upload-alt\"></i>\n                        <p>Double-click to select images</p>\n                        <p class=\"small\">Or drag & drop images here</p>\n                        <p class=\"small\">PNG, JPG, GIF up to 5MB each</p>\n                        <div class=\"file-info\" id=\"fileInfo\">No files selected</div>\n                        <input type=\"file\" id=\"imageInput\" name=\"images\" accept=\"image/*\" multiple style=\"display: none;\">\n                    </div>\n                </div>\n                <button type=\"submit\" class=\"btn\">Publish Post</button>\n            </form>\n        </section>\n\n        <section class=\"upload-history-section\">\n            <h2>Recent Uploads</h2>\n            <div class=\"posts-container\" id=\"uploadHistory\">\n                <!-- Upload history will be dynamically added here -->\n            </div>\n        </section>\n\n        <!-- Modal for post details -->\n        <div id=\"postModal\" class=\"modal\">\n            <div class=\"modal-content\">\n          <span class=\"modal-close\">&times;</span>\n                <div class=\"modal-header\">\n                    <h2 class=\"modal-title\" id=\"modalTitle\"></h2>\n                    <div class=\"modal-meta\" id=\"modalMeta\"></div>\n                    <div class=\"modal-description\" id=\"modalDescription\"></div>\n                </div>\n                <div class=\"modal-body\">\n                    <div class=\"modal-images\" id=\"modalImages\"></div>\n                    <div class=\"comments-section\" id=\"modalComments\">\n                        <h3>Comments</h3>\n           <div id=\"commentsList\"></div>\n                        <div class=\"comment-form\">\n                            <h4>Add a Comment</h4>\n                            <form id=\"commentForm\" action=\"${webhookUrlRoot}/comment\" method=\"post\">\n                                <input type=\"hidden\" id=\"postId\" name=\"postId\">\n                                <textarea id=\"commentContent\" name=\"content\" placeholder=\"Write your comment here...\" required></textarea>\n                                <button type=\"submit\">Post Comment</button>\n                            </form>\n                        </div>\n                    </div>\n        </div>\n            </div>\n        </div>\n    </div>\n\n    <script>\n        document.addEventListener('DOMContentLoaded', function() {\n            // Get DOM elements\n            const imageUpload = document.getElementById('imageUpload');\n            const imageInput = document.getElementById('imageInput');\n            const fileInfo = document.getElementById('fileInfo');\n            const modal = document.getElementById('postModal');\n            const modalClose = document.querySelector('.modal-close');\n            \n            // Handle double-click event for image upload\n            let lastClickTime = 0;\n            const doubleClickThreshold = 300; // milliseconds\n            \n            imageUpload.addEventListener('click', function(e) {\n                const currentTime = new Date().getTime();\n                const timeDiff = currentTime - lastClickTime;\n                \n                if (timeDiff < doubleClickThreshold) {\n                  // Double-click detected\n                  imageInput.click();\n                  lastClickTime = 0; // Reset to prevent triple-click\n                } else {\n                  // First click - record time\n                  lastClickTime = currentTime;\n                }\n            });\n            \n            // Handle file selection\n            imageInput.addEventListener('change', function() {\n              updateFileInfo(this.files);\n            });\n            \n            // Prevent default drag behaviors\n            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {\n              imageUpload.addEventListener(eventName, preventDefaults, false);\n              document.body.addEventListener(eventName, preventDefaults, false);\n            });\n            \n            // Highlight drop area when item is dragged over it\n            ['dragenter', 'dragover'].forEach(eventName => {\n              imageUpload.addEventListener(eventName, highlight, false);\n            });\n            \n            ['dragleave', 'drop'].forEach(eventName => {\n                imageUpload.addEventListener(eventName, unhighlight, false);\n            });\n            \n            // Handle dropped files\n            imageUpload.addEventListener('drop', handleDrop, false);\n            \n            // Modal close functionality\n            modalClose.addEventListener('click', function() {\n                modal.style.display = 'none';\n            });\n            \n            window.addEventListener('click', function(event) {\n                if (event.target == modal) {\n                    modal.style.display = 'none';\n                }\n            });\n            \n            // Helper functions for drag and drop\n            function preventDefaults(e) {\n                e.preventDefault();\n                e.stopPropagation();\n            }\n            \n            function highlight() {\n                imageUpload.style.backgroundColor = '#d1e7ff';\n                imageUpload.style.borderColor = '#1a73e8';\n            }\n  \n            function unhighlight() {\n                imageUpload.style.backgroundColor = '#f8f9fa';\n                imageUpload.style.borderColor = '#3498db';\n            }\n            \n            function handleDrop(e) {\n                const dt = e.dataTransfer;\n                const files = dt.files;\n                \n                // Update file input with dropped files\n                imageInput.files = files;\n                \n                // Update file info display\n                updateFileInfo(files);\n            }\n       \n            function updateFileInfo(files) {\n                if (files.length === 0) {\n                    fileInfo.textContent = 'No files selected';\n                    return;\n                }\n                \n                if (files.length === 1) {\n                    fileInfo.textContent = 'Selected: ' + files[0].name;\n                } else {\n                    const fileNames = Array.from(files).map(file => file.name).join(', ');\n                    fileInfo.textContent = 'Selected ' + files.length + ' files: ' + fileNames;\n                }\n            }\n            \n            // Fetch and display upload history\n            fetchUploadHistory();\n            \n        });\n\n        // Carousel functionality - FIXED 202510250021\n        function initCarousel(carouselId, imageUrls, isModal = false) {\n            const carouselSelector = isModal ? '.modal-carousel' : '.carousel';\n            const carousel = document.querySelector('#' + carouselId + ' ' + carouselSelector);\n            const items = carousel.querySelectorAll(isModal ?  '.modal-carousel-item' : '.carousel-item');\n            const prevBtn = document.querySelector('#' + carouselId + ' ' + (isModal ?  '.modal-carousel-nav.prev' : '.carousel-nav.prev'));\n            const nextBtn = document.querySelector('#' + carouselId + ' ' + (isModal ?  '.modal-carousel-nav.next' : '.carousel-nav.next'));\n            const indicators = document.querySelectorAll('#' + carouselId + ' ' + (isModal ?  '.modal-indicator' : '.indicator'));\n            \n            if (!carousel || items.length === 0) return;\n            \n            let currentIndex = 0;\n            const totalItems = items.length;\n          \n            // Add click event listeners to carousel images\n            items.forEach(function(item, index) {\n                const img = item.querySelector('img');\n                if (img && imageUrls[index]) {\n             img.addEventListener('click', function() {\n                        window.open(imageUrls[index], '_blank');\n                    });\n              }\n            });\n            \n            function updateCarousel() {\n                carousel.style.transform = 'translateX(-' + (currentIndex * 100) + '%)';\n                \n                // Update indicators\n                indicators.forEach(function(indicator, index) {\n                    if (index === currentIndex) {\n                        indicator.classList.add('active');\n                    } else {\n                        indicator.classList.remove('active');\n                    }\n                });\n            }\n            \n            function nextSlide() {\n        currentIndex = (currentIndex + 1) % totalItems;\n                updateCarousel();\n            }\n            \n            function prevSlide() {\n                currentIndex = (currentIndex - 1 + totalItems) % totalItems;\n                updateCarousel();\n            }\n            \n           // Event listeners\n            if (prevBtn) prevBtn.addEventListener('click', prevSlide);\n            if (nextBtn) nextBtn.addEventListener('click', nextSlide);\n            \n            indicators.forEach(function(indicator, index) {\n                indicator.addEventListener('click', function() {\n  currentIndex = index;\n                  updateCarousel();\n                });\n            });\n            \n            // Initialize carousel\n            updateCarousel();\n        }\n\n        // Show post details in modal - FIXED\n        // Add this function to decode HTML entities\n function decodeHtmlEntities(text) {\n            const textArea = document.createElement('textarea');\n            textArea.innerHTML = text;\n      return textArea.value;\n        }\n        \n        // Modified showPostDetails function with decoding fix and comments\n        function showPostDetails(post) {\n            const modal = document.getElementById('postModal');\n            const modalTitle = document.getElementById('modalTitle');\n            const modalMeta = document.getElementById('modalMeta');\n            const modalDescription = document.getElementById('modalDescription');\n            const modalImages = document.getElementById('modalImages');\n            const commentsList = document.getElementById('commentsList');\n            const postIdInput = document.getElementById('postId');\n            \n            // Set modal content (decode title and description)\n            modalTitle.textContent = decodeHtmlEntities(post.title || 'Untitled');\n            const author = (post.author || 'No Author');\n            const createdAt = new Date(post.createdAt);\n            const formattedDate = createdAt.toLocaleDateString() + ' ' + createdAt.toLocaleTimeString();\n            modalMeta.textContent = author + ' - ' + formattedDate;\n            \n            modalDescription.textContent = decodeHtmlEntities(post.description || 'No description');\n            \n            // Set post ID for comments\n            postIdInput.value = post.id || post._id || '';\n            \n           // Generate image display for modal\n            var imagesHtml = '';\n            if (Array.isArray(post.downloadUrls) && post.downloadUrls.length > 0) {\n                if (post.downloadUrls.length > 1) {\n                    // Create carousel for multiple images in modal\n                    var carouselId = 'modal-carousel-' + Date.now();\n                    var carouselItems = '';\n                    for (var j = 0; j < post.downloadUrls.length; j++) {\n                        carouselItems += '<div class=\\\"modal-carousel-item\\\">' +\n                            '<img src=\\\"' + post.downloadUrls[j] + '\\\" alt=\\\"' + (post.title || 'Image') + ' ' + (j + 1) + '\\\" />' +\n                            '</div>';\n         }\n                    \n                    var indicators = '';\n                    for (var k = 0; k < post.downloadUrls.length; k++) {\n    indicators += '<div class=\\\"modal-indicator ' + (k === 0 ? 'active' : '') + '\\\"></div>';\n                    }\n                   \n                    imagesHtml = '<div class=\\\"modal-carousel-container\\\" id=\\\"' + carouselId + '\\\">' +\n                        '<div class=\\\"modal-carousel\\\">' + carouselItems + '</div>' +\n                        '<button class=\\\"modal-carousel-nav prev\\\">&#10094;</button>' +\n  '<button class=\\\"modal-carousel-nav next\\\">&#10095;</button>' +\n                        '<div class=\\\"modal-indicators\\\">' + indicators + '</div>' +\n                        '</div>';\n                } else {\n                    // Create grid for single image in modal\n        var imageGrid = '';\n                    for (var l = 0; l < post.downloadUrls.length; l++) {\n                        imageGrid += '<img src=\\\"' + post.downloadUrls[l] + '\\\" alt=\\\"' + (post.title || 'Image') + '\\\"class=\\\"clickable-image\\\" data-url=\\\"' + post.downloadUrls[l] + '\\\" />';\n                    }\n                    imagesHtml = '<div class=\\\"modal-grid\\\">' + imageGrid + '</div>';\n                }\n           }\n            \n            modalImages.innerHTML = imagesHtml;\n            \n            // Generate comments display\n            var commentsHtml = '';\n            if (Array.isArray(post?.comments) && post.comments.length > 0) {\n                for (var i = 0; i < post.comments.length; i++) {\n                    var comment = post.comments[i];\n                    if (!comment || typeof comment !== 'object') continue;\n                    \n                    var commentDate = new Date(comment?.createdAt || new Date());\n                    var formattedCommentDate = commentDate.toLocaleDateString() + ' ' + commentDate.toLocaleTimeString();\n                    \n                    commentsHtml += '<div class=\"comment\">' +\n                        '<div class=\"comment-author\">' + decodeHtmlEntities(comment?.author || 'Anonymous') + '</div>' +\n                        '<div class=\"comment-date\">' + formattedCommentDate + '</div>' +\n                        '<div class=\"comment-content\">' + comment?.content?.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>' +\n                        '</div>';\n                }\n            } else {\n                commentsHtml = '<p>No comments yet. Be the first to comment!</p>';\n            }\n            \n            commentsList.innerHTML = commentsHtml;\n       \n            // Add click event listeners to modal grid images\n            var clickableImages = modalImages.querySelectorAll('.clickable-image');\n clickableImages.forEach(function(img) {\n               img.addEventListener('click', function() {\n                    var url = this.getAttribute('data-url');\n                    if (url) {\n                        window.open(url, '_blank');\n                    }\n                });\n            });\n            \n            // Show modal\n            modal.style.display = 'block';\n            \n            // Initialize carousel if needed - FIXED\n            if (Array.isArray(post.downloadUrls) && post.downloadUrls.length > 1) {\n                // Use a more reliable method to find the carousel\n                setTimeout(function() {\n                    // Find all modal carousel containers and initialize them\n                 const modalCarousels = document.querySelectorAll('.modal-carousel-container');\n                    modalCarousels.forEach(function(container) {\n       const containerId = container.id;\n                        if (containerId && containerId.startsWith('modal-carousel-')) {\n               initCarousel(containerId, post.downloadUrls, true);\n                        }\n                    });\n                }, 100);\n            }\n        }\n\n        async function fetchUploadHistory() {\n            try {\n                // In a real implementation, this would fetch from your backend\n                // For now, we'll simulate with example data\n                const uploads = `;\n\n  htmlEnd = `;\n                \n             // Sort by creation date (latest first)\n                uploads.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));\n                \n      // Display the uploads\n                displayUploads(uploads);\n           } catch (error) {\n                console.error('Error fetching uploads:', error);\n                document.getElementById('uploadHistory').innerHTML = '<p>Unable to load upload history</p>';\n            }\n        }\n\n        function displayUploads(uploads) {\n          const historyContainer = document.getElementById('uploadHistory');\n          \n          if (uploads.length === 0) {\n              historyContainer.innerHTML = '<p>No uploads yet</p>';\n              return;\n          }\n          \n          // Create HTML for each upload\n          var uploadsHtml = '';\n          for (var i = 0; i < uploads.length; i++) {\n              var upload = uploads[i];\n              var createdAt = new Date(upload.createdAt);\n              var formattedDate = createdAt.toLocaleDateString() + ' ' + createdAt.toLocaleTimeString();\n              var author = upload.author || 'No author';\n              \n              // Get the post ID (important for comments)\n              var postId = upload._id || '';\n  \n              // Generate image display based on number of images\n              var imagesHtml = '';\n              if (Array.isArray(upload.downloadUrls) && upload.downloadUrls.length > 0) {\n                  if (upload.downloadUrls.length > 1) {\n                      // Create carousel for more than 1 image\n                      var carouselId = 'carousel-' + i;\n                      var carouselItems = '';\n             for (var j = 0; j < upload.downloadUrls.length; j++) {\n                          carouselItems += '<div class=\\\"carousel-item\\\">' +\n         '<img src=\\\"' + upload.downloadUrls[j] + '\\\" alt=\\\"' + (upload.title || 'Image') + ' ' + (j + 1) + '\\\" />' + '</div>';\n       }\n                      \n                      var indicators = '';\n                      for (var k = 0; k < upload.downloadUrls.length; k++) {\n                          indicators += '<div class=\\\"indicator ' + (k === 0 ? 'active' : '') + '\\\"></div>';\n                      }\n         \n                      imagesHtml = '<div class=\\\"carousel-container\\\" id=\\\"' + carouselId + '\\\">' +\n                          '<div class=\\\"carousel\\\">' + carouselItems + '</div>' +\n                          '<button class=\\\"carousel-nav prev\\\">&#10094;</button>' +\n            '<button class=\\\"carousel-nav next\\\">&#10095;</button>' +\n                          '<div class=\\\"carousel-indicators\\\">' + indicators + '</div>' +\n                          '</div>';\n                  } else {\n                      // Create grid for single image with special styling\n                      var imageGrid = '';\n                      for (var l = 0; l < upload.downloadUrls.length; l++) {\n                  imageGrid += '<img src=\\\"' + upload.downloadUrls[l] + '\\\" alt=\\\"' + (upload.title || 'Image') + '\\\" class=\\\"clickable-image\\\" data-url=\\\"' + upload.downloadUrls[l] + '\\\" />';\n                      }\n                      imagesHtml = '<div class=\\\"image-grid single-image\\\">' + imageGrid + '</div>';\n                  }\n              }\n              \n              uploadsHtml += '<div class=\\\"post-card\\\" data-post-index=\\\"' + i + '\\\" data-post-id=\\\"' + postId + '\\\">' +\n                  '<div class=\\\"post-content\\\">' +\n                  '<div class=\\\"post-header-clickable\\\">' +\n                  '<h3 class=\\\"post-title\\\">' + decodeHtmlEntities(upload?.title || 'Untitled') + '</h3>' +\n                  '<div class=\\\"post-description\\\">' + decodeHtmlEntities(upload?.description || 'No description').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>' +\n                  '<div class=\\\"post-meta\\\">' + formattedDate +'<b>'+ author +'</b>'+ '</div>' +\n                  '</div>' +\n                  imagesHtml +\n                  '</div>' +\n                  '</div>';\n          }\n          \n          historyContainer.innerHTML = uploadsHtml;\n          \n          // Add click event listeners to post headers\n          var postCards = document.querySelectorAll('.post-card');\n          postCards.forEach(function(card) {\n              var headerClickable = card.querySelector('.post-header-clickable');\n              if (headerClickable) {\n                  headerClickable.addEventListener('click', function(e) {\n                      e.stopPropagation();\n                      var postIndex = card.getAttribute('data-post-index');\n                      if (postIndex !== null && uploads[postIndex]) {\n                          showPostDetails(uploads[postIndex]);\n                      }\n                  });\n              }\n          });\n          \n          // Add click event listeners to grid images\n          var clickableImages = document.querySelectorAll('.clickable-image');\n          clickableImages.forEach(function(img) {\n              img.addEventListener('click', function() {\n                  var url = this.getAttribute('data-url');\n                  if (url) {\n                      window.open(url, '_blank');\n                  }\n              });\n   });\n          \n          // Initialize all carousels after HTML is inserted\n          setTimeout(function() {\n              for (var m = 0; m < uploads.length; m++) {\n                  var upload = uploads[m];\n                  if (Array.isArray(upload.downloadUrls) && upload.downloadUrls.length > 1) {\n                      var carouselId = 'carousel-' + m;\n                      var carouselElement = document.getElementById(carouselId);\n         if (carouselElement) {\n                          initCarousel(carouselId, upload.downloadUrls);\n                      }\n                  }\n              }\n          }, 100);\n      }\n\n    </script>\n</body>\n</html>`;\n} else {\n  // Access denied page for unauthenticated users\n  htmlStart = `<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>Access Denied</title>\n    <style>\n        body {\n            font-family: Arial, sans-serif;\n            margin: 0;\n  padding: 0;\n            background-color: #f4f4f4;\n            color: #333;\n            display: flex;\n            flex-direction: column;\n  min-height: 100vh;\n            text-align: center;\n        }\n        .content {\n            flex: 1;\n            padding: 20px;\n        }\n .access-denied {\n            background-color: #f8d7da;\n            color: #721c24;\n            padding: 15px;\n            border: 1px solid #f5c6cb;\n            border-radius: 4px;\n            margin: 20px auto;\n            max-width: 600px;\n        }\n    </style>\n</head>\n<body>\n    <main class=\"content\">\n        <div class=\"access-denied\">\n       <h2>Access Denied</h2>\n            <p>You must be logged in to access the Photo Blog.</p>\n            <a href=\"${webhookUrlRoot}/login\">Login</a>\n        </div>\n    </main>\n</body>\n</html>`;\n\n}\n\nlet content = '';\n\nconst error = 'Network error: server down or VPN compatibility issue or etc.';\nif ($input.first().json.headers) {\nreturn [{\n    json: {\n        params: params,\n        webhookUrl: webhookUrl,\n        webhookUrlRoot: webhookUrlRoot,\n        content: error,\n        error: error\n    }\n}];\n}\n\ncontent = htmlStart +\n                action +\n                htmlMiddle +\n                sanitizedPostsStr +\n                htmlEnd;\n\nreturn [{\n    json: {\n        params: params,\n        webhookUrl: webhookUrl,\n        webhookUrlRoot: webhookUrlRoot,\n        content: content\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3056,
+        -1328
+      ],
+      "id": "ff03eed7-261d-4386-a9a1-a29722960047",
+      "name": "Get Enhanced Photo Blog Page"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Enhanced status response with session cookie support\nconst html = $input.first().json.html;\nlet sessionCookie = $input.first().json.sessionCookie;\n\n// Ensure sessionCookie is always a string (not object)\nif (sessionCookie === null || sessionCookie === undefined) {\n  sessionCookie = '';\n}\nif (typeof sessionCookie === 'object') {\n  // Handle empty object case\n  sessionCookie = '';\n}\n\n// Add session cookie to response headers if present\nlet headers = {};\nif (sessionCookie && sessionCookie.trim() !== '') {\n  headers['Set-Cookie'] = sessionCookie;\n}\n\n\nreturn [{ json: { html, headers } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1856,
+        -960
+      ],
+      "id": "3f9423ca-13eb-4162-b8fc-74c03d44c7ce",
+      "name": "Enhanced Response Handler"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Set-Cookie",
+                "value": "={{ $json.headers[\"Set-Cookie\"] || '' }}"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -1632,
+        -960
+      ],
+      "id": "efb11f25-4515-446b-a1ff-4d626ef8f550",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process input data\nconst webhookUrl = $input.first().json.webhookUrl;\nconst params = JSON.stringify($input.first().json.params) === '{}' ?\n  $input.first().json.params :\n  $input.first().json.params.select;\nconst webhookUrlRootHttp = JSON.stringify($input.first().json.params) === '{}' ? \n  $input.first().json.webhookUrl :\n  $input.first().json.webhookUrl.split('/').slice(0, -1).join('/');\nconst webhookUrlRoot = webhookUrlRootHttp;\n\nconst content = $input.first().json.content;\nconst sessionCookie = $input.first().json.sessionCookie;\n\n// Utility function to sanitize HTML content\nfunction sanitize(str) {\n  if (typeof str !== 'string') return '';\n  return str.replace(/&/g, '&amp;')\n            .replace(/</g, '&lt;')\n            .replace(/>/g, '&gt;')\n            .replace(/\\\"/g, '&quot;')\n            .replace(/'/g, '&#x27;');\n}\n\n// Generate consistent HTML template\nfunction generateHTML(params, webhookUrlRoot, content, base = '', title = 'xnz') {\n  const sanitizedContent = typeof content === 'string' ? content : JSON.stringify(content);\n  const sanitizedBase = typeof base === 'string' ? base : JSON.stringify(base);\n  const sanitizedTitle = typeof title === 'string' ? title : JSON.stringify(title);\n  const currentYear = new Date().getFullYear();\n  \n  return `<!DOCTYPE html>\n<html lang=\\\"en\\\">\n<head>\n    <meta charset=\\\"UTF-8\\\">\n    <meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1.0\\\">\n    <title>${sanitizedTitle}</title>\n    <style>\n        body {\n            font-family: Arial, sans-serif;\n            margin: 0;\n            padding: 0;\n            background-color: #f4f4f4;\n            color: #333;\n            display: flex;\n            flex-direction: column;\n            min-height: 100vh;\n        }\n        .header {\n            background-color: #333;\n            color: #fff;\n            padding: 15px;\n            text-align: center;\n        }\n        .header a {\n            color: #fff;\n            text-decoration: none;\n            margin: 0 15px;\n            font-weight: bold;\n        }\n        .content {\n            flex: 1;\n            padding: 20px;\n        }\n        .status-message {\n            background-color: #f8d7da;\n            color: #721c24;\n            padding: 15px;\n            border: 1px solid #f5c6cb;\n            border-radius: 4px;\n            margin: 20px auto;\n            max-width: 600px;\n            text-align: center;\n        }\n        .footer {\n            background-color: #444;\n            color: #fff;\n            padding: 10px;\n            text-align: center;\n            font-size: 0.9em;\n        }\n        .footer a {\n            color: #fff;\n            text-decoration: none;\n          margin: 0 10px;\n        }\n        .footer-info {\n            margin-top: 10px;\n        }\n        .footer-map-image {\n            max-width: 150px;\n            height: auto;\n            margin: 10px auto;\n            display: block;\n        }\n    </style>\n</head>\n<body>\n    <header class=\\\"header\\\">\n        <nav>\n            <a href=\\\"${webhookUrlRoot}/aboutus\\\">About Us</a>\n            <a href=\\\"${webhookUrlRoot}/ourservices\\\">Our Services</a>\n            <a href=\\\"${webhookUrlRoot}/blogs\\\">Blogs</a>\n            <a href=\\\"${webhookUrlRoot}/photoblog\\\">Photo Blog</a>\n            <a href=\\\"${webhookUrlRoot}/login\\\">Login</a>\n            <a href=\\\"${webhookUrlRoot}/logout\\\">Logout</a>\n            <a href=\\\"${webhookUrlRoot}/register\\\">Register</a>\n            <a href=\\\"${webhookUrlRoot}/contactus\\\">Contact Us</a>\n        </nav>\n    </header>\n    <main class=\\\"content\\\">\n        ${sanitizedContent}\n    </main>\n    <footer class=\\\"footer\\\">\n        <div class=\\\"footer-info\\\">\n            <p>\n                <strong>Address:</strong> 123 Any Street, Any town, NY 12345<br>\n                <strong>Telephone:</strong> +1 (234) 567-8901<br>\n                <strong>Email:</strong> info@example.com\n            </p>\n            <img src=\\\"https://xnzuuuu1.github.io/public/img/host_files/Icon-round-Question_mark.svg\\\" height=\\\"24\\\" width=\\\"24\\\" alt=\\\"Map Location\\\" class=\\\"footer-map-image\\\">\n            <p>Version 1.0 &copy; ${currentYear} All Rights Reserved.</p>\n        </div>\n    </footer>\n</body>\n</html>`;\n}\n\nconst html = generateHTML(params, webhookUrlRoot, content);\nreturn [{ json: { html, sessionCookie } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2240,
+        -1616
+      ],
+      "id": "f384d946-e77a-417d-b0e6-7639ed10d179",
+      "name": "Generate HTML Response"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process input data\nconst webhookUrl = $input.first().json.webhookUrl;\nconst params = JSON.stringify($input.first().json.params) === '{}' ?\n  $input.first().json.params :\n  $input.first().json.params.select;\nconst webhookUrlRootHttp = JSON.stringify($input.first().json.params) === '{}' ? \n  $input.first().json.webhookUrl :\n  $input.first().json.webhookUrl.split('/').slice(0, -1).join('/');\nconst webhookUrlRoot = webhookUrlRootHttp;\n\n// Generate about us content\nconst content = `\n<div>\n<h2>About Us</h2>\n<p>Welcome to our company. We are dedicated to providing excellent services to our customers.</p>\n<img src=\"https://xnzuuuu1.github.io/public/img/host_files/about_us.avif\" alt=\"about_us.avif\" width=\"600\">\n</div>\n`;\n\nreturn [{ json: { params, webhookUrl, webhookUrlRoot, content } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3136,
+        -2112
+      ],
+      "id": "efb47b2d-e9af-4a64-8685-c2b91aeaf1b0",
+      "name": "Get About Us Page"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process input data\nconst webhookUrl = $input.first().json.webhookUrl;\nconst params = JSON.stringify($input.first().json.params) === '{}' ?\n  $input.first().json.params :\n  $input.first().json.params.select;\nconst webhookUrlRootHttp = JSON.stringify($input.first().json.params) === '{}' ? \n  $input.first().json.webhookUrl :\n  $input.first().json.webhookUrl.split('/').slice(0, -1).join('/');\nconst webhookUrlRoot = webhookUrlRootHttp;\n\n// Generate services content\nconst content = `\n<div>\n<h2>Our Services</h2>\n<ul>\n  <li>Web Development</li>\n  <li>Mobile App Development</li>\n  <li>Cloud Solutions</li>\n  <li>IT Consulting</li>\n</ul>\n</div>\n`;\n\nreturn [{ json: { params, webhookUrl, webhookUrlRoot, content } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3136,
+        -1952
+      ],
+      "id": "596933d0-95af-4bd0-b674-77d038ca4244",
+      "name": "Get Services Page"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process input data\nconst webhookUrl = $input.first().json.webhookUrl;\nconst params = JSON.stringify($input.first().json.params) === '{}' ?\n  $input.first().json.params :\n  $input.first().json.params.select;\nconst webhookUrlRootHttp = JSON.stringify($input.first().json.params) === '{}' ? \n  $input.first().json.webhookUrl :\n  $input.first().json.webhookUrl.split('/').slice(0, -1).join('/');\nconst webhookUrlRoot = webhookUrlRootHttp;\n\n// Generate blogs content\nconst content = `\n<div>\n<h2>Latest Blogs</h2>\n<article>\n  <h3>How to Optimize Your Workflow</h3>\n  <p>Learn tips and tricks to make your processes more efficient...</p>\n</article>\n<article>\n  <h3>Understanding Modern Web Technologies</h3>\n  <p>An overview of the latest trends in web development...</p>\n</article>\n</div>\n`;\n\nreturn [{ json: { params, webhookUrl, webhookUrlRoot, content } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3136,
+        -1792
+      ],
+      "id": "bacb2919-eda7-41e9-aa58-7ad9c02e6b89",
+      "name": "Get Blogs Page"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process input data\nconst webhookUrl = $input.first().json.webhookUrl;\nconst params = JSON.stringify($input.first().json.params) === '{}' ?\n  $input.first().json.params :\n  $input.first().json.params.select;\nconst webhookUrlRootHttp = JSON.stringify($input.first().json.params) === '{}' ? \n  $input.first().json.webhookUrl :\n  $input.first().json.webhookUrl.split('/').slice(0, -1).join('/');\nconst webhookUrlRoot = webhookUrlRootHttp;\n\n// Generate registration form\nconst content = `\n<form action=\"${webhookUrlRoot}/register\" method=\"POST\">\n    <h2>Register</h2>\n    <div>\n        <label for=\"email\">Email:</label>\n        <input type=\"email\" id=\"email\" name=\"email\" required>\n    </div>\n    <div>\n        <label for=\"name\">Name:</label>\n        <input type=\"text\" id=\"name\" name=\"name\" required>\n    </div>\n <div>\n        <label for=\"password\">Password:</label>\n        <input type=\"password\" id=\"password\" name=\"password\" required>\n    </div>\n    <div>\n        <label for=\"confirmPassword\">Confirm Password:</label>\n        <input type=\"password\" id=\"confirmPassword\" name=\"confirmPassword\" required>\n    </div>\n    <button type=\"submit\">Submit</button>\n</form>\n`;\n\nreturn [{ json: { params, webhookUrl, webhookUrlRoot, content } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3136,
+        -1632
+      ],
+      "id": "14aca9ff-e522-4117-803a-c0e4344ca2f9",
+      "name": "Get Registration Page"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process input data\nconst webhookUrl = $input.first().json.webhookUrl;\nconst params = JSON.stringify($input.first().json.params) === '{}' ?\n  $input.first().json.params :\n  $input.first().json.params.select;\nconst webhookUrlRootHttp = JSON.stringify($input.first().json.params) === '{}' ? \n  $input.first().json.webhookUrl :\n  $input.first().json.webhookUrl.split('/').slice(0, -1).join('/');\nconst webhookUrlRoot = webhookUrlRootHttp;\n\n// Generate contact form\nconst content = `\n<h1>Contact Us</h1>\n<form action=\"${webhookUrlRoot}/contactus\" method=\"POST\">\n    <div>\n        <label for=\"name\">Name:</label>\n        <input type=\"text\" id=\"name\" name=\"name\" required>\n    </div>\n    <div>\n        <label for=\"email\">Email:</label>\n        <input type=\"email\" id=\"email\" name=\"email\" required>\n    </div>\n    <div>\n        <label for=\"message\">Message:</label>\n        <textarea id=\"message\" name=\"message\" rows=\"5\" required></textarea>\n    </div>\n    <button type=\"submit\">Submit</button>\n</form>`;\n\nreturn [{ json: { params, webhookUrl, webhookUrlRoot, content } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3136,
+        -1472
+      ],
+      "id": "902f900d-b9de-492e-b811-b7da86e7ff5f",
+      "name": "Get Contact Page"
+    },
+    {
+      "parameters": {
+        "jsCode": "let content = '';\nlet sessionCookie = '';\n\nif($input.first().json.error) {\n  content = $('Prepare User Data').first().json.error;\n}\nelse {\n// Process registration response\ncontent = ( JSON.stringify($input.first().json) !== '{}' && $input.first().json.id.length === 24 ) ?\n'Registration successful! Welcome to our platform, ' + $input.first().json.name :\n'Registration failed. Please try again.';\n\n// ✅ FIXED: Always return string, never empty object\nif (JSON.stringify($input.first().json) !== '{}' && $input.first().json.id.length === 24) {\n  const userData = {\n    userId: $input.first().json._id || $input.first().json.id,\n    email: $input.first().json.email,\n    name: $input.first().json.name,\n    loginTime: new Date().toISOString()\n  };\n  sessionCookie = `session=${encodeURIComponent(JSON.stringify(userData))}; Path=/; Secure; HttpOnly; SameSite=None`;\n}\n}\n\nreturn [{ \n  json: { \n    content, \n    sessionCookie: sessionCookie, // Always string\n    responseData: { html: content, sessionCookie: sessionCookie }\n  } \n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2896,
+        -816
+      ],
+      "id": "99d570ea-72f0-42b4-a20a-c34e3ee6804d",
+      "name": "Process Registration Response"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process contact response\nconst content = $input.first().json.labelIds && $input.first().json.labelIds.length > 0 ? \n  'Thank you for your message. We will contact you soon.' : \n  'Message delivery failed. Please try again later.';\n\n// ✅ FIXED: Empty string instead of empty object\nconst sessionCookie = '';  // String, not {}\n\nreturn [{ \n  json: { \n    content, \n    sessionCookie: sessionCookie,\n    responseData: { html: content, sessionCookie: sessionCookie }\n  } \n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2896,
+        -576
+      ],
+      "id": "050271a8-c08c-4cc6-8d70-330fe143fc5d",
+      "name": "Process Contact Response"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $input.first().json.body.email }}",
+        "subject": "=New Contact Message from {{ $input.first().json.body.name }}",
+        "message": "=Name: {{ $input.first().json.body.name }}\nEmail: {{ $input.first().json.body.email }}\n\nMessage:\n{{ $input.first().json.body.message }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -3072,
+        -576
+      ],
+      "id": "d1785e9e-2843-44c5-833e-82c70c7642fe",
+      "name": "Send Contact Email",
+      "webhookId": "89edf60f-2eeb-4058-9d1a-136302b5a16e",
+      "alwaysOutputData": true,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "h1m4nKmmT75iQFR1",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "multipleMethods": true,
+        "path": "/:select",
+        "responseMode": "responseNode",
+        "options": {
+          "binaryPropertyName": "data",
+          "ignoreBots": true
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -4928,
+        -1008
+      ],
+      "id": "42d962a8-b382-44c9-9118-e2bd5ce7917a",
+      "name": "Non-root Webhook",
+      "webhookId": "610c736a-0cb6-4add-be33-4594abacc74f"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "b7ef4530-ef29-45e0-b89a-f31111080e96",
+                    "leftValue": "={{ JSON.stringify($json.params) === '{}' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "root"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "47e9ba93-103a-4870-9e79-94d5a82bad6a",
+                    "leftValue": "={{ Object.keys($json.params).length === 1 && $json.params.select === 'login' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "login"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "3b075cf1-5d99-4611-98ab-710d318df859",
+                    "leftValue": "={{ Object.keys($json.params).length === 1 && $json.params.select === 'aboutus' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "aboutus"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "91e3413a-6f3b-4b66-aa1c-e0f087efa61a",
+                    "leftValue": "={{ Object.keys($json.params).length === 1 && $json.params.select === 'ourservices' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ourservices"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "797c310d-8c8f-439a-a35e-6743a5a14924",
+                    "leftValue": "={{ Object.keys($json.params).length === 1 && $json.params.select === 'blogs' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "blogs"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c14471a3-1364-4ac9-802e-46ff109405e7",
+                    "leftValue": "={{ Object.keys($json.params).length === 1 && $json.params.select === 'register' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "register"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "7298cf78-764d-4605-a3e6-ba7653b74f12",
+                    "leftValue": "={{ Object.keys($json.params).length === 1 && $json.params.select === 'contactus' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "contactus"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "photoblog-condition",
+                    "leftValue": "={{ Object.keys($json.params).length === 1 && $json.params.select === 'photoblog' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "photoblog"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "948b8f10-daeb-4bd4-8b45-d304b7a1c997",
+                    "leftValue": "={{ Object.keys($json.params).length === 1 && $json.params.select === 'logout' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "logout"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -4320,
+        -1760
+      ],
+      "id": "faf89bd6-fcad-4e63-8c20-5eb046a6b4f4",
+      "name": "Route GET Requests"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "e6ea6e2a-3108-45a2-b81d-33deb4786eef",
+                    "leftValue": "={{ Object.keys($json.params).length === 1 && $json.params.select === 'login' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "login"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c14471a3-1364-4ac9-802e-46ff109405e7",
+                    "leftValue": "={{ Object.keys($json.params).length === 1 && $json.params.select === 'register' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "register"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "7298cf78-764d-4605-a3e6-ba7653b74f12",
+                    "leftValue": "={{ Object.keys($json.params).length === 1 && $json.params.select === 'contactus' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "contactus"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "photoblog-post-condition",
+                    "leftValue": "={{ Object.keys($json.params).length === 1 && $json.params.select === 'photoblog' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "photoblog"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "2dd62004-b790-4a2a-8494-8c3c7525900e",
+                    "leftValue": "={{ Object.keys($json.params).length === 1 && $json.params.select === 'comment' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "comment"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -4336,
+        -736
+      ],
+      "id": "21ce5c0e-deaf-4e6d-ab3e-bc6a6bfbe757",
+      "name": "Route POST Requests"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare login credentials for verification\nconst email = $input.first().json.body.email;\nconst inputPassword = $input.first().json.body.password;\n\n// Return the input password for verification step\nreturn [{ json: {\n  body: {\n    email: email\n  },\n  inputPassword: inputPassword\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4016,
+        -1008
+      ],
+      "id": "238483e8-7ecb-4848-9e4a-bc5caf64ac28",
+      "name": "Hash Login Password"
+    },
+    {
+      "parameters": {
+        "collection": "users",
+        "options": {},
+        "query": "={\n  \"email\": \"{{ $json.body.email }}\"\n}"
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1.2,
+      "position": [
+        -3808,
+        -1008
+      ],
+      "id": "3378759a-6e70-431e-8e10-b0624ec3c41a",
+      "name": "Find User",
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "mongoDb": {
+          "id": "boLSQlsbXxgJZkt4",
+          "name": "MongoDB account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Verify the login password against the stored hash\n// Using the same improved hash function for consistency\n\n// Improved hash function - more rounds, better mixing\nfunction simpleHash(str, salt) {\n  let hash = 0;\n  const strWithSalt = str + salt;\n  \n  // Multiple rounds of hashing with different operations\n  for (let round = 0; round < 3; round++) {\n    for (let i = 0; i < strWithSalt.length; i++) {\n      const char = strWithSalt.charCodeAt(i);\n      \n      // Mix the character with current hash using different operations\n      if (round === 0) {\n        hash = (hash * 31) + char;  // Multiply by prime\n      } else if (round === 1) {\n        hash = hash ^ (char << (i % 8));  // XOR with shift\n      } else {\n        hash = ((hash << 5) - hash) + char;  // Original method\n      }\n      \n      // Keep hash manageable\n      hash = hash & 0xffffffff;  // 32-bit integer\n    }\n    \n    // Add salt into hash at different points\n    if (round === 1) {\n      const saltHash = salt.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);\n      hash = hash ^ saltHash;\n    }\n  }\n  \n  // Convert to hex without artificial padding\n  const hex1 = Math.abs(hash).toString(16);\n  const hex2 = Math.abs(hash * 2654435761).toString(16);  // Use hash multiple times\n  const hex3 = Math.abs(hash >>> 0).toString(16);\n  \n  // Combine different hash representations for better uniqueness\n  return (hex1 + hex2 + hex3).substring(0, 32);\n}\n\ntry {\n  const user = $input.first().json;\n  const inputPassword = $('Hash Login Password').first().json.inputPassword;\n  \n  // Check if user was found\n  if (user.body) {\n    return [{ json: { error: 'Network error: server down or VPN compatibility issue or etc.' } }];\n  }\n  \n  // Check if user was found\n  if (!user || JSON.stringify(user) === '{}' || !user.email) {\n    return [{ json: { error: 'Invalid email or password' } }];\n  }\n  \n  // Hash the input password with the stored salt\n  const hashedInputPassword = simpleHash(inputPassword, user.salt);\n  // Compare with stored hashed password\n  if (hashedInputPassword !== user.password) {\n    return [{ json: { error: 'Invalid email or password' } }];\n  }\n  \n  if (!user || JSON.stringify(user) === '{}' || !user._id || !user.name || !user.password) {\n    return [{ json: { error: 'Invalid database, please contact us' } }];\n  }\n  \n  // Password is valid - return user data (without password and salt)\n  return [{ json: {\n    _id: user._id,\n    email: user.email,\n    name: user.name\n  } }];\n} catch (err) {\n  return [{ json: { error: 'Internal error during verification' } }];\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3568,
+        -1008
+      ],
+      "id": "8d9dee9e-f473-44c5-923e-9b517bccb30c",
+      "name": "Verify Login Password"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "users",
+        "fields": "email, name, password, salt, createdAt",
+        "options": {
+          "useDotNotation": false
+        }
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1.2,
+      "position": [
+        -3072,
+        -736
+      ],
+      "id": "fa6759f4-6b49-4757-9181-62bce70b5cb1",
+      "name": "Create User",
+      "executeOnce": true,
+      "credentials": {
+        "mongoDb": {
+          "id": "boLSQlsbXxgJZkt4",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "collection": "users",
+        "options": {},
+        "query": "={\n  \"email\": \"{{ $json.body.email }}\"\n}"
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1.2,
+      "position": [
+        -4016,
+        -816
+      ],
+      "id": "5377687e-f3ab-48e5-810d-31d4d4416ba4",
+      "name": "Check Email Exists",
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "mongoDb": {
+          "id": "boLSQlsbXxgJZkt4",
+          "name": "MongoDB account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check if email already exists (n8n MongoDB workaround for silent failures)\nconst existingUser = $input.first().json;\n\nif (existingUser && existingUser.email) {\n  // Email already exists - return error\n  return [{ json: { error: 'Email address is already registered' } }];\n}\n\n// Email doesn't exist - pass through to next step\nreturn [{ json: $('Non-root Webhook').first().json }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3792,
+        -816
+      ],
+      "id": "049b3295-20c7-48ef-bb22-57128b5fc64e",
+      "name": "Email Uniqueness Filter"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Improved password hashing with createdAt timestamp\n// Only processes if email uniqueness check passed\nconst incoming = $input.first().json;\nif (incoming && incoming.error) {\n  // Return as an array item so downstream nodes receive a proper n8n item\n  return [{ json: incoming }];\n}\n\n// Generate a random salt using a crypto-secure source when available, fallback to Math.random\nlet salt;\ntry {\n  // Try Node's crypto if available in this runtime\n  const crypto = require && typeof require === 'function' ? require('crypto') : null;\n  if (crypto && crypto.randomBytes) {\n    salt = crypto.randomBytes(16).toString('hex');\n  } else if (globalThis && globalThis.crypto && typeof globalThis.crypto.getRandomValues === 'function') {\n    // Browser-like crypto (unlikely in n8n but keep safe)\n    const arr = new Uint8Array(16);\n    globalThis.crypto.getRandomValues(arr);\n    salt = Array.from(arr).map(b => ('00' + b.toString(16)).slice(-2)).join('');\n  } else {\n    // Fallback (non-crypto) - keep reasonably long\n    salt = Math.random().toString(36).repeat(3).substring(2, 34);\n  }\n} catch (e) {\n  salt = Math.random().toString(36).repeat(3).substring(2, 34);\n}\n\n// Improved hash function - more rounds, better mixing\nfunction simpleHash(str, salt) {\n  let hash = 0;\n  const strWithSalt = str + salt;\n  \n  // Multiple rounds of hashing with different operations\n  for (let round = 0; round < 3; round++) {\n    for (let i = 0; i < strWithSalt.length; i++) {\n      const char = strWithSalt.charCodeAt(i);\n      \n      // Mix the character with current hash using different operations\n      if (round === 0) {\n        hash = (hash * 31) + char;  // Multiply by prime\n      } else if (round === 1) {\n        hash = hash ^ (char << (i % 8));  // XOR with shift\n      } else {\n        hash = ((hash << 5) - hash) + char;  // Original method\n      }\n      \n      // Keep hash manageable\n      hash = hash & 0xffffffff;  // 32-bit integer\n    }\n    \n    // Add salt into hash at different points\n    if (round === 1) {\n      const saltHash = salt.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);\n      hash = hash ^ saltHash;\n    }\n  }\n  \n  // Convert to hex without artificial padding\n  const hex1 = Math.abs(hash).toString(16);\n  const hex2 = Math.abs(hash * 2654435761).toString(16);  // Use hash multiple times\n  const hex3 = Math.abs(hash >>> 0).toString(16);\n  \n  // Combine different hash representations for better uniqueness\n  return (hex1 + hex2 + hex3).substring(0, 32);\n}\n\ntry {\n  // Get user data from form\n  const email = $input.first().json.body.email;\n  const name = $input.first().json.body.name;\n  const password = $input.first().json.body.password;\n  const confirmPassword = $input.first().json.body.confirmPassword;\n  \n  // Validate password confirmation\n  if (password !== confirmPassword) {\n    return [{ json: { error: 'Passwords do not match' } }];\n  }\n  \n  // Validate password strength\n  if (password.length < 8) {\n    return [{ json: { error: 'Password must be at least 8 characters long' } }];\n  }\n  \n  // Validate email format\n  const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n  if (!emailRegex.test(email)) {\n    return [{ json: { error: 'Invalid email format' } }];\n  }\n  \n  // Hash the password with salt\n  const hashedPassword = simpleHash(password, salt);\n  \n  // Add createdAt timestamp\n  const createdAt = new Date().toISOString();\n  \n  return [{ json: {\n    email: email,\n    name: name,\n    password: hashedPassword,\n    salt: salt,\n    createdAt: createdAt\n  } }];\n} catch (err) {\n  // Return a proper n8n item containing the error\n  return [{ json: { error: 'Internal error preparing user data' } }];\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3568,
+        -816
+      ],
+      "id": "b215ca14-42d2-488b-9d18-19fd48de55f1",
+      "name": "Prepare User Data"
+    },
+    {
+      "parameters": {
+        "multipleMethods": true,
+        "httpMethod": [
+          "GET"
+        ],
+        "path": "610c736a-0cb6-4add-be33-4594abacc74f",
+        "responseMode": "responseNode",
+        "options": {
+          "ignoreBots": true
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -4896,
+        -1648
+      ],
+      "id": "cd87b205-5ba5-40b2-84f0-6188dd447618",
+      "name": "Root Webhook",
+      "webhookId": "610c736a-0cb6-4add-be33-4594abacc74f"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process the uploaded images and prepare for GitHub upload\nconst binary = $('Non-root Webhook').first().binary;\nconst author = $input.first().json.session.name;\nconst title = $input.first().json.body.title;\nconst description = $input.first().json.body.description;\nconst createdAt = new Date().toISOString();\n\n// For each file, prepare data for GitHub upload\nconst imageData = [];\nfor (const binaryPropertyName in binary) {\n    const fileData = binary[binaryPropertyName].data; // Base64 encoded data\n    const fileName = binary[binaryPropertyName].fileName;\n    const mimeType = binary[binaryPropertyName].mimeType.split('/');\n\n    imageData.push({\n        author: author,\n        title: title,\n        description: description,\n        filename: fileName,\n        binaryData: fileData,\n        mimeType: mimeType,\n        createdAt: createdAt\n    });\n}\n\nreturn imageData.map(data => ({ json: data }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4016,
+        -400
+      ],
+      "id": "88a5fd5b-da80-45e8-886c-4d466da0c551",
+      "name": "Process Images"
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "owner": "xnzuuuu1",
+        "repository": "xnzuuuu1.github.io",
+        "filePath": "=public/img/posts/{{$json.filename}}",
+        "fileContent": "={{ $json.binaryData }}",
+        "commitMessage": "={{ $json.mimeType }},{{ $json.title }},{{ $json.description }}, {{ $json.author }}"
+      },
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1,
+      "position": [
+        -3792,
+        -400
+      ],
+      "id": "fe6026bf-4c26-4d4a-b8ae-a4f49e1fd418",
+      "name": "Upload to GitHub",
+      "webhookId": "48e49bfa-eb78-4c19-be37-8ca5028d79ac",
+      "alwaysOutputData": true,
+      "credentials": {
+        "githubApi": {
+          "id": "ldce84MZrW58OFoO",
+          "name": "GitHub account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process input data\nconst webhookUrl = $('Non-root Webhook').first().json.webhookUrl;\nconst params = JSON.stringify($('Non-root Webhook').first().json.params) === '{}' ?\n  $('Non-root Webhook').first().json.params :\n  $('Non-root Webhook').first().json.params.select;\nconst webhookUrlRootHttp = JSON.stringify($('Non-root Webhook').first().json.params) === '{}' ?\n  $('Non-root Webhook').first().json.webhookUrl :\n  $('Non-root Webhook').first().json.webhookUrl.split('/').slice(0, -1).join('/');\nconst webhookUrlRoot = webhookUrlRootHttp;\n\nconst author = $input.first().json.author;\nconst title = $input.first().json.title;\nconst description = $input.first().json.description;\nconst createdAt = $input.first().json.createdAt;\nconst downloadUrls = $input.first().json.downloadUrls === null ? [] : $input.first().json.downloadUrls;\n\n// Generate success page\nconst content = `\n<h1>Photo Upload Successful</h1>\n<p>Your photos have been uploaded successfully!</p>\n<h2>Uploaded Images:</h2>\n<div>${author}</div>\n<div>${title}</div>\n<div>${description}</div>\n<div>${createdAt}</div>\n<ul>\n  ${downloadUrls.map(url => `<li><a href=\"${url}\" target=\"_blank\">${url}</a></li>`).join('')}\n</ul>\n<a href=\"${webhookUrlRoot}/photoblog\">Upload More Photos</a>\n<a href=\"${webhookUrlRoot}\">Back to Home</a>\n`;\n\nreturn [{ json: { params, webhookUrl, webhookUrlRoot, content, author, title, description, createdAt, downloadUrls } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3072,
+        -400
+      ],
+      "id": "254e2f11-2957-42bf-81cc-6a95b9abae49",
+      "name": "Generate Upload Success Page"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process input data\nconst webhookUrl = $('Non-root Webhook').first().json.webhookUrl;\nconst params = JSON.stringify($('Non-root Webhook').first().json.params) === '{}' ?\n  $('Non-root Webhook').first().json.params :\n  $('Non-root Webhook').first().json.params.select;\nconst webhookUrlRootHttp = JSON.stringify($('Non-root Webhook').first().json.params) === '{}' ?\n  $('Non-root Webhook').first().json.webhookUrl :\n  $('Non-root Webhook').first().json.webhookUrl.split('/').slice(0, -1).join('/');\nconst webhookUrlRoot = webhookUrlRootHttp;\n\nconst content = $input.first().json.content;\nconst sessionCookie = '';\n\nreturn [{ json: { params, webhookUrl, webhookUrlRoot, content, sessionCookie } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2896,
+        -400
+      ],
+      "id": "60e71ac4-3f2b-4eb2-b5d8-6e837a6fed8e",
+      "name": "Prepare Final Response"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "posts",
+        "fields": "author, title, description, createdAt, downloadUrls, comments",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1.2,
+      "position": [
+        -3344,
+        -400
+      ],
+      "id": "9bdcc23d-5e75-44db-a151-7aaf5648df9c",
+      "name": "Save Post to Database",
+      "executeOnce": true,
+      "credentials": {
+        "mongoDb": {
+          "id": "boLSQlsbXxgJZkt4",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "dbcb5325-7ca8-406a-9c28-56be3a51b8c3",
+              "name": "title",
+              "value": "={{ $('Process Images').item.json.title }}",
+              "type": "string"
+            },
+            {
+              "id": "294f0d15-3b22-4815-9579-818b818b02ad",
+              "name": "description",
+              "value": "={{ $('Process Images').item.json.description }}",
+              "type": "string"
+            },
+            {
+              "id": "bd140a8d-55ed-4aff-9c6b-c97bc4843d83",
+              "name": "createdAt",
+              "value": "={{ $('Process Images').item.json.createdAt }}",
+              "type": "string"
+            },
+            {
+              "id": "5cdacccf-db99-45e4-8af9-a1413e2486cd",
+              "name": "downloadUrls",
+              "value": "={{ $input.all().map(item => item.json.content.download_url) }}",
+              "type": "array"
+            },
+            {
+              "id": "comments-field",
+              "name": "comments",
+              "value": "=[]",
+              "type": "array"
+            },
+            {
+              "id": "fd6355a2-1413-4428-91b6-fba714a0ebec",
+              "name": "author",
+              "value": "={{ $('Process Images').item.json.author }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -3568,
+        -400
+      ],
+      "id": "d3ffed6e-871e-462c-a714-9583c2454bdc",
+      "name": "Prepare Post Data",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "if ($input.first().json.headers) {\n  return [{ json: { error: 'Network error: server down or VPN compatibility issue or etc.' } }];\n}\n\n// Process input data\nconst webhookUrl = $('Non-root Webhook').first().json.webhookUrl;\nconst params = JSON.stringify($('Non-root Webhook').first().json.params) === '{}' ?\n  $('Non-root Webhook').first().json.params :\n  $('Non-root Webhook').first().json.params.select;\nconst webhookUrlRootHttp = JSON.stringify($('Non-root Webhook').first().json.params) === '{}' ?\n  $('Non-root Webhook').first().json.webhookUrl :\n  $('Non-root Webhook').first().json.webhookUrl.split('/').slice(0, -1).join('/');\nconst webhookUrlRoot = webhookUrlRootHttp;\n\n// Check if user is already logged in\nconst session = $('Session Middleware1').first().json.session || {};\n\n// Process comment submission\nconst _id = $('Non-root Webhook').first().json.body.postId;\nconst commentContent = $('Non-root Webhook').first().json.body.content;\n\nif (!_id || _id.length === 0 || !commentContent || commentContent.length === 0) {\n  return [{ json: { error: 'Missing required fields' } }];\n}\n\n// Create comment object\nconst comments = Array.isArray($input.first().json.comments) ? $input.first().json.comments : [];\n\nconst commentObj = {\n  author: session.name || session.email || 'Anonymous',\n  content: commentContent,\n  createdAt: new Date().toISOString()\n};\ncomments.push(commentObj);\ncomments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));\n\nreturn [{ json: { _id, session, comments } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3792,
+        -240
+      ],
+      "id": "71dbca64-5638-4dcc-a93a-4f6d50648c81",
+      "name": "Process Comment",
+      "retryOnFail": false,
+      "executeOnce": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process input data\nconst webhookUrl = $('Non-root Webhook').first().json.webhookUrl;\nconst params = JSON.stringify($('Non-root Webhook').first().json.params) === '{}' ?\n  ('Non-root Webhook').first().json.params:\n  $('Non-root Webhook').first().json.params.select;\nconst webhookUrlRootHttp = JSON.stringify($('Non-root Webhook').first().json.params) === '{}' ?\n  $('Non-root Webhook').first().json.webhookUrl :\n  $('Non-root Webhook').first().json.webhookUrl.split('/').slice(0, -1).join('/');\nconst webhookUrlRoot = webhookUrlRootHttp;\n\n// Redirect to photoblog page\nconst content = `<script>window.location.href = \\\"${webhookUrlRoot}/photoblog\\\";</script>`;\n\nreturn [{ json: { params, webhookUrl, webhookUrlRoot, content } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2896,
+        -240
+      ],
+      "id": "2d9a94d7-8f79-49d3-88e0-73f5ac4bc2f3",
+      "name": "Generate Comment Response"
+    },
+    {
+      "parameters": {
+        "collection": "posts",
+        "options": {
+          "limit": 50,
+          "sort": "{ \"createdAt\": -1 }"
+        }
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1.2,
+      "position": [
+        -3200,
+        -1328
+      ],
+      "id": "d8ff4489-b793-4151-9b6f-be00c51ef2db",
+      "name": "Get Photo Posts",
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "mongoDb": {
+          "id": "boLSQlsbXxgJZkt4",
+          "name": "MongoDB account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process input data\nconst webhookUrl = $('Non-root Webhook').first().json.webhookUrl;\nconst params = JSON.stringify($('Non-root Webhook').first().json.params) === '{}' ?\n  ('Non-root Webhook').first().json.params:\n  $('Non-root Webhook').first().json.params.select;\nconst webhookUrlRootHttp = JSON.stringify($('Non-root Webhook').first().json.params) === '{}' ?\n  $('Non-root Webhook').first().json.webhookUrl :\n  $('Non-root Webhook').first().json.webhookUrl.split('/').slice(0, -1).join('/');\nconst webhookUrlRoot = webhookUrlRootHttp;\n\nconst content = $input.first().json.content;\nconst sessionCookie = $input.first().json.sessionCookie;\n\n// Utility function to sanitize HTML content\nfunction sanitize(str) {\n  if (typeof str !== 'string') return '';\n  return str.replace(/&/g, '&amp;')\n            .replace(/</g, '&lt;')\n            .replace(/>/g, '&gt;')\n            .replace(/\\\"/g, '&quot;')\n            .replace(/'/g, '&#x27;');\n}\n\n// Generate consistent HTML template\nfunction generateHTML(params, webhookUrlRoot, content, base = '', title = 'xnz') {\n  const sanitizedContent = typeof content === 'string' ? content : JSON.stringify(content);\n  const sanitizedBase = typeof base === 'string' ? base : JSON.stringify(base);\n  const sanitizedTitle = typeof title === 'string' ? title : JSON.stringify(title);\n  const currentYear = new Date().getFullYear();\n  \n  return `<!DOCTYPE html>\n<html lang=\\\"en\\\">\n<head>\n    <meta charset=\\\"UTF-8\\\">\n    <meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1.0\\\">\n    <title>${sanitizedTitle}</title>\n    <style>\n        body {\n            font-family: Arial, sans-serif;\n            margin: 0;\n            padding: 0;\n            background-color: #f4f4f4;\n            color: #333;\n            display: flex;\n            flex-direction: column;\n            min-height: 100vh;\n        }\n        .header {\n            background-color: #333;\n            color: #fff;\n            padding: 15px;\n            text-align: center;\n        }\n        .header a {\n            color: #fff;\n            text-decoration: none;\n            margin: 0 15px;\n            font-weight: bold;\n        }\n        .content {\n            flex: 1;\n            padding: 20px;\n        }\n        .status-message {\n            background-color: #f8d7da;\n            color: #721c24;\n            padding: 15px;\n            border: 1px solid #f5c6cb;\n            border-radius: 4px;\n            margin: 20px auto;\n            max-width: 600px;\n            text-align: center;\n        }\n        .footer {\n            background-color: #444;\n            color: #fff;\n            padding: 10px;\n            text-align: center;\n            font-size: 0.9em;\n        }\n        .footer a {\n            color: #fff;\n            text-decoration: none;\n          margin: 0 10px;\n        }\n        .footer-info {\n            margin-top: 10px;\n        }\n        .footer-map-image {\n            max-width: 150px;\n            height: auto;\n            margin: 10px auto;\n            display: block;\n        }\n    </style>\n</head>\n<body>\n    <header class=\\\"header\\\">\n        <nav>\n            <a href=\\\"${webhookUrlRoot}/aboutus\\\">About Us</a>\n            <a href=\\\"${webhookUrlRoot}/ourservices\\\">Our Services</a>\n            <a href=\\\"${webhookUrlRoot}/blogs\\\">Blogs</a>\n            <a href=\\\"${webhookUrlRoot}/photoblog\\\">Photo Blog</a>\n            <a href=\\\"${webhookUrlRoot}/login\\\">Login</a>\n            <a href=\\\"${webhookUrlRoot}/logout\\\">Logout</a>\n            <a href=\\\"${webhookUrlRoot}/register\\\">Register</a>\n            <a href=\\\"${webhookUrlRoot}/contactus\\\">Contact Us</a>\n        </nav>\n    </header>\n    <main class=\"content\">\n        <div class=\"status-message\">\n            <h2>Web Application Status</h2>\n            <p>${sanitizedContent}</p>\n        </div>\n    </main>\n    <footer class=\\\"footer\\\">\n        <div class=\\\"footer-info\\\">\n            <p>\n                <strong>Address:</strong> 123 Any Street, Any town, NY 12345<br>\n                <strong>Telephone:</strong> +1 (234) 567-8901<br>\n                <strong>Email:</strong> info@example.com\n            </p>\n            <img src=\\\"https://xnzuuuu1.github.io/public/img/host_files/Icon-round-Question_mark.svg\\\" height=\\\"24\\\" width=\\\"24\\\" alt=\\\"Map Location\\\" class=\\\"footer-map-image\\\">\n            <p>Version 1.0 &copy; ${currentYear} All Rights Reserved.</p>\n        </div>\n    </footer>\n</body>\n</html>`;\n}\n\nconst html = generateHTML(params, webhookUrlRoot, content);\nreturn [{ json: { html, sessionCookie } }];\n\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2256,
+        -416
+      ],
+      "id": "994078ba-027d-406f-a117-c70b4d6ce8ab",
+      "name": "Generate Status Response"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check session and add user context to data flow\nconst webhookData = $input.first().json;\nconst cookies = $input.first().json.headers?.cookie || '';\n\n// Simple session parsing (in production, use proper session management)\nlet session = {};\nif (cookies) {\n  const sessionCookie = cookies.split(';').find(c => c.trim().startsWith('session='));\n  if (sessionCookie) {\n    try {\n      const sessionData = decodeURIComponent(sessionCookie.split('=')[1]);\n      session = JSON.parse(sessionData);\n    } catch (e) {\n      session = {};\n    }\n  }\n}\n\n// Add session data to the flow\nconst output = {\n  ...webhookData,\n  session: session,\n  isAuthenticated: !!session.userId\n};\n\nreturn [{ json: output }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4608,
+        -800
+      ],
+      "id": "91473d88-3df8-4a0d-8cac-119370244252",
+      "name": "Session Middleware1"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "collection": "posts",
+        "updateKey": "_id",
+        "fields": "comments",
+        "options": {
+          "useDotNotation": false
+        }
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1.2,
+      "position": [
+        -3568,
+        -240
+      ],
+      "id": "18acc6a1-ab9a-4bba-b0d1-af15b92ffba0",
+      "name": "Update documents",
+      "executeOnce": true,
+      "credentials": {
+        "mongoDb": {
+          "id": "boLSQlsbXxgJZkt4",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "collection": "posts",
+        "options": {},
+        "query": "={\n  \"_id\": \"{{ $json.body.postId }}\"\n}\n"
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1.2,
+      "position": [
+        -4016,
+        -240
+      ],
+      "id": "f050b6e6-0e6b-46d0-b5ac-edfbe46c0682",
+      "name": "Find documents",
+      "executeOnce": true,
+      "credentials": {
+        "mongoDb": {
+          "id": "boLSQlsbXxgJZkt4",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.error }}",
+                    "rightValue": "Email address is already registered",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "e5b7f53f-9393-4b5a-a7b6-7b703609fa9a"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "already registered"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "7910c940-6993-49cc-b78d-733479300d27",
+                    "leftValue": "={{ $json.error }}",
+                    "rightValue": "Password must be at least 8 characters long",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "short length"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "335a3a64-cec1-4fd3-a9c6-ae623aaaaef9",
+                    "leftValue": "={{ $json.error }}",
+                    "rightValue": "Invalid email format",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "email format"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "f2d90ad7-9bb5-49fe-b899-ad11dd5d0faa",
+                    "leftValue": "={{ $json.error }}",
+                    "rightValue": "Passwords do not match",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "passwords mismatch"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "e4f953bb-6afb-4654-91a9-00841b2c3fe4",
+                    "leftValue": "={{ $json.error }}",
+                    "rightValue": "Network error: server down or VPN compatibility issue or etc.",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "MonngoDB"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        -3344,
+        -880
+      ],
+      "id": "69851b53-cebd-43a2-8939-18d64be6f25b",
+      "name": "Errror"
+    },
+    {
+      "parameters": {
+        "sendTo": "xnzuuuu1@gmail.com, xnzuuuu1@outlook.com",
+        "subject": "={{ \"⚠️ Homepage URL renewal\" }}",
+        "message": "=Message:\n{{ \"New Homepage URL: \" + $json.stdout.parseJson().url + \"/webhook/610c736a-0cb6-4add-be33-4594abacc74f\"}} ",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -4016,
+        -48
+      ],
+      "id": "a7759190-1ab8-4707-a39d-1ab64916a0a5",
+      "name": "Send Contact Email1",
+      "webhookId": "89edf60f-2eeb-4058-9d1a-136302b5a16e",
+      "alwaysOutputData": true,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "h1m4nKmmT75iQFR1",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "get",
+        "owner": {
+          "__rl": true,
+          "value": "xnzuuuu1",
+          "mode": "list",
+          "cachedResultName": "xnzuuuu1",
+          "cachedResultUrl": "https://github.com/xnzuuuu1"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "xnzuuuu1.github.io",
+          "mode": "list",
+          "cachedResultName": "xnzuuuu1.github.io",
+          "cachedResultUrl": "https://github.com/xnzuuuu1/xnzuuuu1.github.io"
+        },
+        "filePath": "index.html",
+        "asBinaryProperty": false,
+        "additionalParameters": {}
+      },
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        -3728,
+        144
+      ],
+      "id": "3f51d980-eddb-466f-916c-b1a5c206c33a",
+      "name": "Get a file",
+      "webhookId": "4110e6e9-d3e6-49c1-b40c-d2650facb51e",
+      "credentials": {
+        "githubApi": {
+          "id": "ldce84MZrW58OFoO",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "function extractUrl(output) {\n  // Regex to capture both the action type and the URL from the JSON string\n  const combinedRegex = /href=\"(?<url>https:\\/\\/[^\"]+)\"/;\n\n  const match = output.match(combinedRegex);\n\n  if (match && match.groups) {\n    const url = match.groups.url;\n    console.log(`Found URL: \"${url}\".`);\n    \n    // Return an object containing both values\n    return url;\n  } else {\n    return \"URL was not found in the output using the expected format.\";\n  }\n}\nfunction replaceUrlInHtmlString(htmlContent, oldUrl, newUrl) {\n    let result = '';\n    let startIdx = 0;\n    let foundIdx = htmlContent.indexOf(oldUrl, startIdx);\n    while (foundIdx !== -1) {\n        result += htmlContent.substring(startIdx, foundIdx);\n        result += newUrl;\n        startIdx = foundIdx + oldUrl.length;\n        foundIdx = htmlContent.indexOf(oldUrl, startIdx);\n    }\n    result += htmlContent.substring(startIdx);\n    return result;\n}\n\n\n\nlet oldUrl = extractUrl($input.first().json.content);\nlet modifiedHtmlString = replaceUrlInHtmlString($input.first().json.content, oldUrl, $input.first().json.url + \"/webhook/610c736a-0cb6-4add-be33-4594abacc74f\");\nreturn [{ json: {oldUrl, modifiedHtmlString } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3264,
+        144
+      ],
+      "id": "69fda3ba-557a-44b4-9c8b-8e40778fe687",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7f65e386-f73c-462e-be49-7c3bbcfa108c",
+              "name": "content",
+              "value": "={{ $json.content.base64Decode() }}",
+              "type": "string"
+            },
+            {
+              "id": "182f3fe6-fac0-4ffb-bb05-e177bb68edb5",
+              "name": "url",
+              "value": "={{ $('Switch').item.json.stdout.parseJson().url }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -3488,
+        144
+      ],
+      "id": "9c79ee3e-9e72-4bb6-aa1b-3893b1ef9a79",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "79b1a37a-8dbf-4309-a232-c252b6366192",
+              "name": "modifiedHtmlString",
+              "value": "={{ $json.modifiedHtmlString.base64Encode() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -3040,
+        144
+      ],
+      "id": "69b4d206-2354-48d0-b638-0e99d5c9bd13",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "edit",
+        "owner": {
+          "__rl": true,
+          "value": "xnzuuuu1",
+          "mode": "name"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "xnzuuuu1.github.io",
+          "mode": "name"
+        },
+        "filePath": "index.html",
+        "fileContent": "={{ $json.modifiedHtmlString }}",
+        "commitMessage": "updated loogin url"
+      },
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        -2816,
+        144
+      ],
+      "id": "edac738e-ebc5-4512-982e-ef48b6dc5d78",
+      "name": "Edit a file",
+      "webhookId": "5a75e95b-3043-4e75-a7ba-73d06ffc82c5",
+      "credentials": {
+        "githubApi": {
+          "id": "ldce84MZrW58OFoO",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "82e08d2d-a009-415f-aff7-63dfc88b4f91",
+                    "leftValue": "={{ JSON.parse($json.stdout).action === 'update' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "update"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "59faa932-e4ac-4f7c-bdc6-3ead3a077cdf",
+                    "leftValue": "={{ JSON.parse($json.stdout).action === 'noChange' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "noChange"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "73e8e08a-be4d-4283-8b84-ef034c17afd2",
+                    "leftValue": "={{ JSON.parse($json.stdout).action === 'error' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "error"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        -4336,
+        160
+      ],
+      "id": "19523794-afdb-4e4d-b67a-5c73d7c637f4",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "sendTo": "xnzuuuu1@gmail.com, xnzuuuu1@outlook.com",
+        "subject": "={{ \"⚠️ Homepage URL error\" }}",
+        "message": "=Message:\n{{ \"Homepage URL error: \" + $json.stdout.parseJson().error }} ",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -4016,
+        336
+      ],
+      "id": "ae714a4f-f426-4090-a0e9-b01ad337d72d",
+      "name": "Send Contact Email2",
+      "webhookId": "89edf60f-2eeb-4058-9d1a-136302b5a16e",
+      "alwaysOutputData": false,
+      "executeOnce": true,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "h1m4nKmmT75iQFR1",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "https://api.github.com/gists/86feee2ed4f329adbdc09ccc3dc7dbf1",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"files\": {\n    \"cloudflared_quick_tunnel_url.json\": {\n      \"content\": \"{ \\\"url\\\": \\\"{{ $json.stdout.parseJson().url + \"/webhook/610c736a-0cb6-4add-be33-4594abacc74f\" }}\\\" }\"\n    }\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -4016,
+        144
+      ],
+      "id": "c8697faf-2230-446d-b872-c6d18342cee7",
+      "name": "HTTP Request",
+      "credentials": {
+        "githubApi": {
+          "id": "ldce84MZrW58OFoO",
+          "name": "GitHub account"
+        },
+        "httpHeaderAuth": {
+          "id": "DOgKDL2dkixEwesm",
+          "name": "Header Auth account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Tunnel Monitor": {
+      "main": [
+        [
+          {
+            "node": "Check Tunnel Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Tunnel Status": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Session Middleware": {
+      "main": [
+        [
+          {
+            "node": "Route GET Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Comment": {
+      "main": [
+        [
+          {
+            "node": "Update documents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Comment Response": {
+      "main": [
+        [
+          {
+            "node": "Generate Status Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Login Session": {
+      "main": [
+        [
+          {
+            "node": "Generate Status Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Logout": {
+      "main": [
+        [
+          {
+            "node": "Generate HTML Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Enhanced Login Page": {
+      "main": [
+        [
+          {
+            "node": "Generate HTML Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Enhanced Photo Blog Page": {
+      "main": [
+        [
+          {
+            "node": "Generate HTML Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enhanced Response Handler": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate HTML Response": {
+      "main": [
+        [
+          {
+            "node": "Enhanced Response Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get About Us Page": {
+      "main": [
+        [
+          {
+            "node": "Generate HTML Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Services Page": {
+      "main": [
+        [
+          {
+            "node": "Generate HTML Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Blogs Page": {
+      "main": [
+        [
+          {
+            "node": "Generate HTML Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Registration Page": {
+      "main": [
+        [
+          {
+            "node": "Generate HTML Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Contact Page": {
+      "main": [
+        [
+          {
+            "node": "Generate HTML Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Registration Response": {
+      "main": [
+        [
+          {
+            "node": "Generate Status Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Contact Response": {
+      "main": [
+        [
+          {
+            "node": "Generate Status Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Contact Email": {
+      "main": [
+        [
+          {
+            "node": "Process Contact Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Non-root Webhook": {
+      "main": [
+        [
+          {
+            "node": "Session Middleware",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Session Middleware1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route GET Requests": {
+      "main": [
+        [
+          {
+            "node": "Get Enhanced Login Page",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Enhanced Login Page",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get About Us Page",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Services Page",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Blogs Page",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Registration Page",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Contact Page",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Photo Posts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Logout",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route POST Requests": {
+      "main": [
+        [
+          {
+            "node": "Hash Login Password",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Email Exists",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Contact Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Images",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Find documents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hash Login Password": {
+      "main": [
+        [
+          {
+            "node": "Find User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find User": {
+      "main": [
+        [
+          {
+            "node": "Verify Login Password",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Login Password": {
+      "main": [
+        [
+          {
+            "node": "Create Login Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create User": {
+      "main": [
+        [
+          {
+            "node": "Process Registration Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Email Exists": {
+      "main": [
+        [
+          {
+            "node": "Email Uniqueness Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Uniqueness Filter": {
+      "main": [
+        [
+          {
+            "node": "Prepare User Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare User Data": {
+      "main": [
+        [
+          {
+            "node": "Errror",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Images": {
+      "main": [
+        [
+          {
+            "node": "Upload to GitHub",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to GitHub": {
+      "main": [
+        [
+          {
+            "node": "Prepare Post Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Upload Success Page": {
+      "main": [
+        [
+          {
+            "node": "Prepare Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Final Response": {
+      "main": [
+        [
+          {
+            "node": "Generate Status Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Post to Database": {
+      "main": [
+        [
+          {
+            "node": "Generate Upload Success Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Post Data": {
+      "main": [
+        [
+          {
+            "node": "Save Post to Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Photo Posts": {
+      "main": [
+        [
+          {
+            "node": "Get Enhanced Photo Blog Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Status Response": {
+      "main": [
+        [
+          {
+            "node": "Enhanced Response Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Session Middleware1": {
+      "main": [
+        [
+          {
+            "node": "Route POST Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update documents": {
+      "main": [
+        [
+          {
+            "node": "Generate Comment Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Root Webhook": {
+      "main": [
+        [
+          {
+            "node": "Route GET Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find documents": {
+      "main": [
+        [
+          {
+            "node": "Process Comment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Errror": {
+      "main": [
+        [
+          {
+            "node": "Process Registration Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Registration Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Registration Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Registration Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Registration Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Contact Email1": {
+      "main": [
+        []
+      ]
+    },
+    "Get a file": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        [
+          {
+            "node": "Edit a file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Send Contact Email1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        [
+          {
+            "node": "Send Contact Email2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "83100023-02f5-43de-bf9d-705356611d2e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "54e3a36a0aeeba46bc94e88619a4d15f93044d49e5a1f1b260a646f4180a05e9"
+  },
+  "id": "5aGN0Gc8P7oAiaar",
+  "tags": []
+}
