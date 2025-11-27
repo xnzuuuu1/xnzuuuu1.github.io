@@ -1954,7 +1954,7 @@
       "main": [
         [
           {
-            "node": "Route GET Requests",
+            "node": "Session Middleware",
             "type": "main",
             "index": 0
           }
@@ -2048,10 +2048,9 @@
   "settings": {
     "executionOrder": "v1",
     "callerPolicy": "workflowsFromSameOwner",
-    "executionTimeout": -1,
     "availableInMCP": false
   },
-  "versionId": "b403144e-ccfe-439a-a8ed-c377196bae68",
+  "versionId": "274a9c2c-1166-4ef3-8631-a047c79052c1",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "2bc2c2eeecc113567af1bd3b5c6a7884e736b4f53ee825214d51ace628198d6b"
