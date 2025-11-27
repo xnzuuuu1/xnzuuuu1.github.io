@@ -1,0 +1,1 @@
+This n8n workflow is a real FREE solution to self-hosting a personal homepage - Photo Blog and etc. Serving as a 100% money-FREE credit-card-FREE self-hosting full-stack dynamic webpage by integrating n8n + cloudflared quick tunnel + entr + nodes [i.e. github (gist + static homepage repository https://<your name>.github.io), mongodb (or sqllite for privacy) & gmail].
